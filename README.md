@@ -1,0 +1,95 @@
+# ProofSet
+
+A Bluecore-style **proof set** inside the InsiderOne (IO) email editor.
+
+Bluecore shows proofs of a campaign for several customers from its audience on the campaign summary page. IO only previews one user at a time ("Previewing As" in the Preview and Test Message modal). ProofSet fills the gap: it runs IO's own single-user preview for 10 customers from the campaign audience and shows the results side by side in one grid.
+
+ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
+
+Current stable version: **1.0.0**.
+
+## Install
+
+1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome.
+2. Open the install link: <https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js> and click **Install** in the Tampermonkey tab that opens.
+3. Open any IO panel (`https://<panel>.inone.useinsider.com`).
+
+Updates: the script declares `@updateURL`, so Tampermonkey picks up new versions pushed to `main` on its regular update check (or via Tampermonkey > Utilities > Check for userscript updates).
+
+If the repository is private, the raw link only works for people with access; install by pasting the script into a new Tampermonkey script instead.
+
+## Use
+
+1. Open an email campaign. Visit the **Recipients** step once: ProofSet quietly saves the campaign's selected static or dynamic segment in the background.
+2. Go to the **Design** step and click **ProofSet** (next to "Preview and Test Message").
+3. If ProofSet doesn't know the audience yet, a segment link field appears. Paste a link and press **Use segment** (or Enter). To switch audiences later, use **Change audience** next to Refresh Proofs:
+   - `https://<panel>.inone.useinsider.com/dynamic-segments/76?currentTab=users-segment`
+   - `https://<panel>.inone.useinsider.com/static-segments/2/contacts`
+4. Proofs start rendering straight away. **Refresh Proofs** shows a different set of 10 customers.
+
+### What each card shows
+
+- Masked email (e.g. `j***@gmail.com`) and the rendered size in KB
+- Subject line as resolved for that customer
+- **Design** tag: *Unique* when no other customer in the sample sees this exact email, or *Shared by N* when N customers see the same email (same visible text, images and link destinations). Per-customer tracking, such as link query params (`srccode`, `promotion`) and tracking pixels, is ignored. The summary line shows how many distinct designs the sample produced, and warns when every customer sees the same design.
+- **Sort by design** control above the proofs: *Unique first* or *Similar together*, with the active one highlighted.
+- Flags: Gmail clipping (over 102 KB), close to the clip limit, unrendered Liquid left in the output, render errors
+- The rendered email, scaled to the card width. Click a card to open it full size: the modal fits the screen and scrolls inside for long emails (close with X, Esc or clicking outside).
+
+The header shows the average size as "Estimated Template Size", like Bluecore.
+
+### Session behaviour
+
+The 10 customers picked for a campaign and segment are kept in **sessionStorage** (Profile ID and masked email only). Reopening ProofSet in the same tab shows the same customers, rendered from the current (including unsaved) design. If none are stored and the audience is known, ProofSet gathers 10 customers and renders straight away. **Refresh Proofs** picks a different 10. Closing the tab clears them.
+
+The campaign's audience (segment id and name only, no PII) is kept in **localStorage** per panel and campaign. A segment chosen via **Change audience** is stored separately and used instead; **Reset audience** (shown only when the campaign's own audience is known) removes it and brings back proofs for the real audience.
+
+## How it works
+
+ProofSet runs inside the panel page and calls the same internal requests the panel itself uses, with the logged-in user's session and the page's CSRF token (`meta[name="csrf-token"]`).
+
+| Purpose | Request |
+| --- | --- |
+| Static segment list (name to id) | `GET /segmentation/saved-segments/static-segment?page=N` returns `data[{text, value}]` |
+| Dynamic segment list (name to id) | `GET /segmentation/saved-segments/dynamic-segment?per_page=100&page=N` returns `data[{id, name}]` |
+| Static segment users | `POST /contact/proxy/static-segment/{id}/records` body `{invalidateCache, advancedFilter:{}, searchFilter:[], id:"{id}"}` |
+| Dynamic segment users | `POST /contact/proxy/dynamic-segment/records` body `{invalidateCache, searchFilter:[], id:{id}}` |
+| Render one proof | `POST /newsletter/dynamic-content-preview/get-preview-content` |
+
+Segment user requests are asynchronous: `meta.status` is `pending` until IO has built the list, so ProofSet polls until `done`. Each page returns up to 100 contacts with `email` and `insider_id`.
+
+The render request body:
+
+```json
+{
+  "couponListId": 0,
+  "isLiquidSyntax": true,
+  "user": { "identifierType": "insider_id", "identifierValue": "<profile id>" },
+  "subject": "<base64>",
+  "preHeader": "<base64>",
+  "html": "<base64 template html>"
+}
+```
+
+`identifierType` values: `insider_id` (Profile ID), `em` (Email), `pn` (Phone), `uuid`, `c_distinct_id`.
+
+The response contains base64 `html` (fully rendered, Liquid resolved), `subject`, `preHeader`, `plainText`, `insiderId` and `thumbnail` (URL of a JPEG screenshot, which IO's own modal displays). ProofSet renders the HTML in a sandboxed iframe with no script execution, and falls back to the screenshot if the HTML is empty. Each render takes about 1.2 s; ProofSet runs 3 at a time.
+
+The template, subject, preheader and Liquid flag come from the editor's Vuex getters (`EMAIL_LOCALIZATION_STORE/getTemplateHTML`, `getMailSubject`, `getMailPreHeaderText`, `getIsLiquidSyntax`), so unsaved edits are included.
+
+## Known limitations
+
+- **Internal endpoints:** none of the requests above are published APIs. IO can change them without notice.
+- **Sample source:** customers are drawn from the first page of segment users (up to 100), not the whole segment.
+- **Audience types:** campaigns that target attribute rules or "All contacts" have no list to draw from; paste a segment link instead. Excluded segments are ignored.
+- **Coupons:** `couponListId` is sent as 0, so coupon codes show as the placeholder.
+- **Recent Users:** each render may add the customer to IO's "Recent Users" list in Previewing As.
+- **Design labels:** visible per-person content (for example a first name in the copy) makes each proof a unique design, which is correct. Tracking that lives outside query strings (for example a code in a link path) is not ignored yet.
+- **PII:** emails are masked in the UI. Panel users without PII access may receive masked data from IO; previews use the Profile ID, so they still work.
+
+## Roadmap
+
+- Phase 1 (current): proof sets from IO segments.
+- Draw the sample from the whole segment (paging with the `next` cursor).
+- Coupon list support.
+- Phase 2: Bluecore vs IO comparison for the same customers, once a client's customer profiles and product catalog are synced to IO.
