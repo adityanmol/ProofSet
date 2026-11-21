@@ -22,9 +22,11 @@ If the repository is private, the raw link only works for people with access; in
 
 1. Open an email campaign. Visit the **Recipients** step once: ProofSet quietly saves the campaign's selected static or dynamic segment in the background.
 2. Go to the **Design** step and click **ProofSet** (next to "Preview and Test Message").
-3. If ProofSet doesn't know the audience yet, a segment link field appears. Paste a link and press **Use segment** (or Enter). To switch audiences later, use **Change audience** next to Refresh Proofs:
-   - `https://<panel>.inone.useinsider.com/dynamic-segments/76?currentTab=users-segment`
-   - `https://<panel>.inone.useinsider.com/static-segments/2/contacts`
+3. If ProofSet doesn't know the audience yet, a segment link field appears. Paste the link of any segment from the panel and press **Use segment** (or Enter). To switch audiences later, use **Change audience** next to Refresh Proofs. Accepted link shapes (`<panel>` and `<id>` are whatever your segment uses; anything after the id, such as `?currentTab=...` or `/contacts`, is ignored):
+   - `https://<panel>.inone.useinsider.com/dynamic-segments/<id>`
+   - `https://<panel>.inone.useinsider.com/static-segments/<id>`
+
+   For example, `.../dynamic-segments/76?currentTab=users-segment` or `.../static-segments/2/contacts`.
 4. Proofs start rendering straight away. **Refresh Proofs** shows a different set of 10 customers.
 
 ### What each card shows
