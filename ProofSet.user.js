@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.0.2
+// @version      1.0.3
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,9 +50,10 @@
 
   const CFG = {
     sampleSize: 10,
-    concurrency: 3,
-    pollTries: 15,
-    pollDelayMs: 1500,
+    concurrency: 2, // preview renders in flight at once
+    pollTries: 8, // segment users: at most 8 checks...
+    pollDelayMs: 2000, // ...2 s apart, then give up (only after a user click)
+    tickMs: 1000, // page watcher runs at most once a second, only on campaign Recipients/Design
     gmailClipKB: 102,
     cardMaxHeight: 900,
   };
@@ -252,8 +253,14 @@
     try { return JSON.parse(sessionStorage.getItem(SS_USERS(cid, aud)) || 'null'); } catch (e) { return null; }
   }
 
+  // Segment users are reused for 10 minutes, so "Refresh Proofs" picks new customers without asking
+  // IO's segment service again.
+  const contactsCache = new Map();
   async function pickRandomUsers(cid, aud) {
-    const contacts = await fetchSegmentContacts(aud);
+    const ck = `${aud.type}_${aud.id}`;
+    const hit = contactsCache.get(ck);
+    const contacts = hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit.contacts : await fetchSegmentContacts(aud);
+    if (contacts.length && (!hit || hit.contacts !== contacts)) contactsCache.set(ck, { at: Date.now(), contacts });
     const usable = contacts.filter((c) => c.insider_id);
     if (!usable.length) throw new Error('No users found in this segment.');
     const picked = shuffle(usable).slice(0, CFG.sampleSize).map((c) => ({
@@ -281,7 +288,21 @@
     };
   }
 
+  // Renders are cached for the page's lifetime: reopening ProofSet with the same customers and an
+  // unchanged design shows the cached proofs and makes no new calls to IO.
+  const renderCache = new Map();
+  const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
   async function renderForUser(tpl, user) {
+    const key = `${user.insiderId}|${fnv(`${tpl.isLiquid}|${tpl.subject}|${tpl.preHeader}|${tpl.html}`)}`;
+    if (renderCache.has(key)) return { ...renderCache.get(key), user };
+    const r = await renderFromIO(tpl, user);
+    if (!r.error) {
+      if (renderCache.size >= 60) renderCache.delete(renderCache.keys().next().value);
+      renderCache.set(key, r);
+    }
+    return r;
+  }
+  async function renderFromIO(tpl, user) {
     const body = {
       couponListId: 0,
       isLiquidSyntax: tpl.isLiquid,
@@ -331,13 +352,38 @@
   // such as srccode / promotion params and pixel URLs carrying the partner code.
   const TRACKER_HOST = /(^|\.)(pxl|pixel|trk|track|tracking|open|beacon|mon-trk)[.-]|mon-trk\.com|doubleclick|google-analytics/i;
   const stripUrl = (u) => String(u || '').trim().split('#')[0].split('?')[0];
-  function isTrackingImg(img) {
-    const w = parseInt(img.getAttribute('width') || '', 10);
-    const h = parseInt(img.getAttribute('height') || '', 10);
-    const st = (img.getAttribute('style') || '').replace(/\s/g, '').toLowerCase();
+  function isTrackingAttrs(src, width, height, style) {
+    const w = parseInt(width || '', 10);
+    const h = parseInt(height || '', 10);
+    const st = (style || '').replace(/\s/g, '').toLowerCase();
     if ((w && w <= 3) || (h && h <= 3)) return true;
     if (/display:none|visibility:hidden|width:[0-3]px|height:[0-3]px|max-height:0/.test(st)) return true;
-    try { return TRACKER_HOST.test(new URL(img.getAttribute('src') || '', 'https://x.invalid').hostname); } catch (e) { return false; }
+    try { return TRACKER_HOST.test(new URL(src || '', 'https://x.invalid').hostname); } catch (e) { return false; }
+  }
+  function isTrackingImg(img) {
+    return isTrackingAttrs(img.getAttribute('src'), img.getAttribute('width'), img.getAttribute('height'), img.getAttribute('style'));
+  }
+
+  // Display copies of a proof must not fire tracking pixels: viewing a proof would count as an open,
+  // and some tracker hosts never answer, which keeps the page loading forever. Tracking images get a
+  // blank 1x1 instead. Size, design grouping and checks still use the untouched HTML.
+  const BLANK_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const neutralCache = new Map();
+  function neutralizeTrackers(html) {
+    if (!html) return html;
+    if (neutralCache.has(html)) return neutralCache.get(html);
+    const attr = (tag, name) => {
+      const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(["'])([^"']*)\\1`, 'i')) || tag.match(new RegExp(`\\s${name}\\s*=\\s*([^\\s>]+)`, 'i'));
+      return m ? (m.length > 2 ? m[2] : m[1]) : '';
+    };
+    const out = html.replace(/<img\b[^>]*>/gi, (tag) => {
+      const src = attr(tag, 'src');
+      if (!src || src.startsWith('data:')) return tag;
+      if (!isTrackingAttrs(src, attr(tag, 'width'), attr(tag, 'height'), attr(tag, 'style'))) return tag;
+      return tag.replace(/(\ssrc\s*=\s*)(["'])[^"']*\2/i, `$1$2${BLANK_GIF}$2`).replace(/^<img/i, '<img data-ps-tracker="removed"');
+    });
+    neutralCache.set(html, out);
+    return out;
   }
   function designSignature(html) {
     if (!html) return '';
@@ -360,19 +406,21 @@
   // %3C%ins_view_in_browser%%3E, %3C%25ins_view_in_browser%25%3E.
   const VIB_TOKEN = /(?:<|&lt;|%3C)\s*(?:%25|%)\s*ins_view_in_browser\s*(?:%25|%)\s*(?:>|&gt;|%3E)/i;
   const proofUrls = new Map(); // rendered html -> blob: URL, revoked when the drawer closes
-  function proofBlobUrl(html) {
-    if (proofUrls.has(html)) return proofUrls.get(html);
+  function proofBlobUrl(original) {
+    if (proofUrls.has(original)) return proofUrls.get(original);
+    const html = neutralizeTrackers(original);
     // The blob page lives on the panel's origin, so block every script in it.
     const csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'">';
     const head = csp + (/<title[\s>]/i.test(html) ? '' : '<title>Proof preview (ProofSet)</title>');
     const doc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + head) : head + html;
     const url = URL.createObjectURL(new Blob([doc], { type: 'text/html' }));
-    proofUrls.set(html, url);
+    proofUrls.set(original, url);
     return url;
   }
   function revokeProofUrls() {
     proofUrls.forEach((u) => URL.revokeObjectURL(u));
     proofUrls.clear();
+    neutralCache.clear();
   }
   // Returns the proof HTML ready for the full-size view: unfilled view-in-browser links point at this
   // customer's proof, and every link opens in a new tab. Done on the HTML string BEFORE it is shown,
@@ -380,7 +428,7 @@
   // tracking pixels can keep the document loading for a long time).
   function prepareForDisplay(html) {
     let n = 0;
-    let out = html.replace(/(href\s*=\s*)(["'])([^"']*)\2/gi, (m, pre, q, val) => {
+    let out = neutralizeTrackers(html).replace(/(href\s*=\s*)(["'])([^"']*)\2/gi, (m, pre, q, val) => {
       if (!VIB_TOKEN.test(val)) return m;
       n++;
       return `${pre}${q}${proofBlobUrl(html)}${q}`;
@@ -604,7 +652,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.2${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.3${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
@@ -860,7 +908,7 @@
       frame.appendChild(ifr);
       watchSize(ifr, (s) => { natural = { w: Math.max(600, s.w), h: s.h }; layout(); });
       try { new ResizeObserver(layout).observe(frame); } catch (e) { /* ignore */ }
-      ifr.srcdoc = r.html;
+      ifr.srcdoc = neutralizeTrackers(r.html);
       layout();
       frame.onclick = () => zoom(r.html);
     }
@@ -925,11 +973,23 @@
 
   /* ---------------- boot ---------------- */
 
+  // Page watcher. Local DOM work only: it adds the button on Design and reads the segment rule on
+  // Recipients. It makes a network call only when the Recipients rule changes (one segment-list
+  // lookup). Runs at most once per CFG.tickMs, and does nothing outside a campaign's Recipients/Design.
+  let lastTick = 0;
+  let pending = null;
   const tick = () => {
+    pending = null;
+    lastTick = Date.now();
+    const ci = campaignInfo();
+    if (!ci || ci.step === 'launch') { document.getElementById(`ps-cta-${CHANNEL}`)?.remove(); return; }
     try { injectButton(); } catch (e) { /* ignore */ }
-    captureAudienceOnRecipients().catch(() => {});
+    if (ci.step === 'recipients') captureAudienceOnRecipients().catch(() => {});
   };
-  new MutationObserver(() => { clearTimeout(tick._t); tick._t = setTimeout(tick, 400); })
-    .observe(document.documentElement, { childList: true, subtree: true });
+  const schedule = () => {
+    if (pending) return;
+    pending = setTimeout(tick, Math.max(0, CFG.tickMs - (Date.now() - lastTick)));
+  };
+  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
   tick();
 })();

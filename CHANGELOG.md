@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3
+
+- Fix: pages kept loading forever. The email's tracking pixel (pxl.mon-trk.com, carrying the partner code) never answers preview traffic, so every proof card, the full-size view and the "View in browser" tab waited on it indefinitely. Tracking images (tracker hosts, 1x1 or hidden images) are now replaced with a blank 1x1 in everything ProofSet displays, so viewing a proof never fires a tracker or counts as an open. Size, design grouping and the Gmail check still use the untouched email.
+- Lighter on IO:
+  - Rendered proofs are cached for the page's lifetime; reopening ProofSet with the same customers and an unchanged design makes no new calls to IO.
+  - Segment customers are reused for 10 minutes, so Refresh Proofs does not query IO's segment service again.
+  - At most 2 preview renders in flight (was 3); segment polling capped at 8 checks, 2 s apart (was 15 at 1.5 s), and only after a user click.
+  - The page watcher runs at most once a second, only on a campaign's Recipients or Design step, and makes a network call only when the Recipients segment rule changes.
+
 ## 1.0.2
 
 - Fix: "View in browser" still opened IO's unfilled link on heavy emails. 1.0.1 rewrote the link after the preview iframe's `load` event, which waits for every remote image and tracking pixel, so on real emails it often had not run yet when the link was clicked. The link is now rewritten in the HTML before it is shown, independent of loading.

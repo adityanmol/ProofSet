@@ -6,7 +6,7 @@ Bluecore shows proofs of a campaign for several customers from its audience on t
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0** (1.0.2 in pre-prod validation).
+Current stable version: **1.0.0** (1.0.3 in pre-prod validation).
 
 ## Install
 
