@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Fix: "View in browser" in the full-size proof view. IO's link uses the send-time token `<%ins_view_in_browser%>`, which IO fills (and creates the hosted page for) only when an email is actually sent; preview renders, including IO's own "Previewing As", leave it unfilled, so the link led nowhere. ProofSet now points it at that customer's own rendered proof, opened in a new tab with scripts blocked (CSP `script-src 'none'`) and a readable tab title. Other links are untouched; temporary links are released when the drawer closes.
+
 ## 1.0.0 (stable)
 
 - First stable release. Same functionality as 0.6.3, marked stable.

@@ -6,7 +6,7 @@ Bluecore shows proofs of a campaign for several customers from its audience on t
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0**.
+Current stable version: **1.0.1**.
 
 ## Install
 
@@ -37,6 +37,7 @@ If the repository is private, the raw link only works for people with access; in
 - **Sort by design** control above the proofs: *Unique first* or *Similar together*, with the active one highlighted.
 - Flags: Gmail clipping (over 102 KB), close to the clip limit, unrendered Liquid left in the output, render errors
 - The rendered email, scaled to the card width. Click a card to open it full size: the modal fits the screen and scrolls inside for long emails (close with X, Esc or clicking outside).
+- **View in browser** inside the full-size view opens that customer's proof in a new tab. IO's real view-in-browser page (`<%ins_view_in_browser%>`) only exists after an email is sent, so previews cannot link to it.
 
 The header shows the average size as "Estimated Template Size", like Bluecore.
 

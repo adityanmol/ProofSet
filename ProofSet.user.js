@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.0.0
+// @version      1.0.1
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -345,6 +345,43 @@
     return JSON.stringify([text, imgs, links]);
   }
 
+  /* ---------------- view in browser ---------------- */
+
+  // IO's "View in browser" link is https://email.useinsider.com/view-in-browser/<%ins_view_in_browser%>.
+  // <%ins_view_in_browser%> is a SEND-TIME token: IO fills it (and creates the hosted copy) only when
+  // an email is actually sent. Preview renders, including IO's own "Previewing As", return it unfilled,
+  // so the link leads nowhere. In ProofSet's full-size view we point it at this customer's own rendered
+  // proof instead, opened in a new tab with scripts blocked.
+  const VIB_TOKEN = /<%\s*ins_view_in_browser\s*%>|%3C%25\s*ins_view_in_browser\s*%25%3E/i;
+  const proofUrls = new Map(); // rendered html -> blob: URL, revoked when the drawer closes
+  function proofBlobUrl(html) {
+    if (proofUrls.has(html)) return proofUrls.get(html);
+    // The blob page lives on the panel's origin, so block every script in it.
+    const csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'">';
+    const head = csp + (/<title[\s>]/i.test(html) ? '' : '<title>Proof preview (ProofSet)</title>');
+    const doc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + head) : head + html;
+    const url = URL.createObjectURL(new Blob([doc], { type: 'text/html' }));
+    proofUrls.set(html, url);
+    return url;
+  }
+  function revokeProofUrls() {
+    proofUrls.forEach((u) => URL.revokeObjectURL(u));
+    proofUrls.clear();
+  }
+  // Rewrites unfilled view-in-browser links inside a rendered proof's document. Returns how many.
+  function fixViewInBrowser(doc, html) {
+    let n = 0;
+    doc.querySelectorAll('a[href]').forEach((a) => {
+      if (!VIB_TOKEN.test(a.getAttribute('href') || '')) return;
+      a.setAttribute('href', proofBlobUrl(html));
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener');
+      a.setAttribute('title', "Opens this customer's proof. IO creates the real view-in-browser page only when the email is sent.");
+      n++;
+    });
+    return n;
+  }
+
   /* ---------------- iframe sizing ---------------- */
 
   // Natural content size of a same-origin (sandboxed, no scripts) srcdoc iframe.
@@ -552,7 +589,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.0</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.1</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
@@ -579,7 +616,7 @@
     document.body.appendChild(ov);
 
     const $ = (id) => ov.querySelector('#' + id);
-    const close = () => ov.remove();
+    const close = () => { ov.remove(); revokeProofUrls(); };
     $('ps-close').onclick = close;
     ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
 
@@ -848,6 +885,7 @@
       document.body.appendChild(z);
       watchSize(ifr, (s) => { natural = { w: Math.max(320, s.w), h: s.h }; layout(); });
       window.addEventListener('resize', layout);
+      ifr.addEventListener('load', () => { try { fixViewInBrowser(ifr.contentDocument, html); } catch (e) { /* ignore */ } });
       ifr.srcdoc = html;
     }
 
