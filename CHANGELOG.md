@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Fix: "View in browser" still opened IO's unfilled link on heavy emails. 1.0.1 rewrote the link after the preview iframe's `load` event, which waits for every remote image and tracking pixel, so on real emails it often had not run yet when the link was clicked. The link is now rewritten in the HTML before it is shown, independent of loading.
+- Recognises the token raw, HTML-escaped and percent-encoded (`<%ins_view_in_browser%>`, `&lt;%...%&gt;`, `%3C%ins_view_in_browser%%3E`, `%3C%25...%25%3E`).
+- All links in the full-size view open in a new tab.
+
 ## 1.0.1
 
 - Fix: "View in browser" in the full-size proof view. IO's link uses the send-time token `<%ins_view_in_browser%>`, which IO fills (and creates the hosted page for) only when an email is actually sent; preview renders, including IO's own "Previewing As", leave it unfilled, so the link led nowhere. ProofSet now points it at that customer's own rendered proof, opened in a new tab with scripts blocked (CSP `script-src 'none'`) and a readable tab title. Other links are untouched; temporary links are released when the drawer closes.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.0.1
+// @version      1.0.2
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -358,7 +358,9 @@
   // an email is actually sent. Preview renders, including IO's own "Previewing As", return it unfilled,
   // so the link leads nowhere. In ProofSet's full-size view we point it at this customer's own rendered
   // proof instead, opened in a new tab with scripts blocked.
-  const VIB_TOKEN = /<%\s*ins_view_in_browser\s*%>|%3C%25\s*ins_view_in_browser\s*%25%3E/i;
+  // Matches the token raw, HTML-escaped or percent-encoded: <%ins_view_in_browser%>, &lt;%...%&gt;,
+  // %3C%ins_view_in_browser%%3E, %3C%25ins_view_in_browser%25%3E.
+  const VIB_TOKEN = /(?:<|&lt;|%3C)\s*(?:%25|%)\s*ins_view_in_browser\s*(?:%25|%)\s*(?:>|&gt;|%3E)/i;
   const proofUrls = new Map(); // rendered html -> blob: URL, revoked when the drawer closes
   function proofBlobUrl(html) {
     if (proofUrls.has(html)) return proofUrls.get(html);
@@ -374,18 +376,22 @@
     proofUrls.forEach((u) => URL.revokeObjectURL(u));
     proofUrls.clear();
   }
-  // Rewrites unfilled view-in-browser links inside a rendered proof's document. Returns how many.
-  function fixViewInBrowser(doc, html) {
+  // Returns the proof HTML ready for the full-size view: unfilled view-in-browser links point at this
+  // customer's proof, and every link opens in a new tab. Done on the HTML string BEFORE it is shown,
+  // so it does not depend on the iframe finishing loading (heavy emails with remote images or slow
+  // tracking pixels can keep the document loading for a long time).
+  function prepareForDisplay(html) {
     let n = 0;
-    doc.querySelectorAll('a[href]').forEach((a) => {
-      if (!VIB_TOKEN.test(a.getAttribute('href') || '')) return;
-      a.setAttribute('href', proofBlobUrl(html));
-      a.setAttribute('target', '_blank');
-      a.setAttribute('rel', 'noopener');
-      a.setAttribute('title', "Opens this customer's proof. IO creates the real view-in-browser page only when the email is sent.");
+    let out = html.replace(/(href\s*=\s*)(["'])([^"']*)\2/gi, (m, pre, q, val) => {
+      if (!VIB_TOKEN.test(val)) return m;
       n++;
+      return `${pre}${q}${proofBlobUrl(html)}${q}`;
     });
-    return n;
+    if (!/<base[\s>]/i.test(out)) {
+      const base = '<base target="_blank">';
+      out = /<head[^>]*>/i.test(out) ? out.replace(/<head[^>]*>/i, (m) => m + base) : base + out;
+    }
+    return { html: out, vibFixed: n };
   }
 
   /* ---------------- iframe sizing ---------------- */
@@ -600,7 +606,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.1${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.2${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
@@ -896,8 +902,7 @@
       document.body.appendChild(z);
       watchSize(ifr, (s) => { natural = { w: Math.max(320, s.w), h: s.h }; layout(); });
       window.addEventListener('resize', layout);
-      ifr.addEventListener('load', () => { try { fixViewInBrowser(ifr.contentDocument, html); } catch (e) { /* ignore */ } });
-      ifr.srcdoc = html;
+      ifr.srcdoc = prepareForDisplay(html).html;
     }
 
     function showStoredOrEmpty() {
