@@ -16,6 +16,25 @@ Current stable version: **1.0.1**.
 
 Updates: the script declares `@updateURL`, so Tampermonkey picks up new versions pushed to `main` on its regular update check (or via Tampermonkey > Utilities > Check for userscript updates).
 
+### Pre-prod build
+
+Install link: <https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js>
+
+- Installs **alongside** production: its own name ("ProofSet (pre-prod)"), its own namespace and its own update URL (the `pre-prod` branch), so it never replaces or downgrades the production install.
+- The footer button has a dashed border and a **PRE** badge; the drawer shows "pre-prod" next to the version.
+- Both builds share saved audiences and the session's picked customers.
+
+### Branches and builds
+
+`staging` (development) -> `pre-prod` (validation, pre-prod install link) -> `main` (production install link).
+
+`ProofSet.user.js` is the only file to edit. `ProofSet.preprod.user.js` is generated from it:
+
+```
+node build.js          # regenerate ProofSet.preprod.user.js
+node build.js --check  # fails if it is out of date (run before committing)
+```
+
 If the repository is private, the raw link only works for people with access; install by pasting the script into a new Tampermonkey script instead.
 
 ## Use

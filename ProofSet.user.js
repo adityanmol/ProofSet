@@ -44,6 +44,10 @@
 (function () {
   'use strict';
 
+  // Release channel. 'prod' in ProofSet.user.js; build.js writes 'pre-prod' into ProofSet.preprod.user.js.
+  const CHANNEL = 'prod';
+  const IS_PROD = CHANNEL === 'prod';
+
   const CFG = {
     sampleSize: 10,
     concurrency: 3,
@@ -436,13 +440,15 @@
 
   const CSS = `
   /* Theme follows the IO panel: primary #0a2ecc, subtle #dae1fb, text #2c3546 / #656f85, Figtree, 4px radius */
-  #ps-cta{display:flex;align-items:center;margin-right:12px}
+  .ps-cta{display:flex;align-items:center;margin-right:12px}
   /* Proofly re-inserts its CTA right before "Preview and Test Message"; keep it visually first
      so the footer reads: Proofly | ProofSet | Preview and Test Message | Save and Continue. */
   #ecp-cta{order:-1}
-  #ps-btn{display:flex;align-items:center;gap:8px;height:40px;padding:8px 14px;box-sizing:border-box;border-radius:4px;border:1px solid #0a2ecc;background:#fff;color:#0a2ecc;font-family:Figtree,system-ui,-apple-system,sans-serif;font-size:15px;font-weight:400;cursor:pointer;white-space:nowrap;line-height:1}
-  #ps-btn:hover{background:#eef1fd}
-  #ps-btn svg{flex:none}
+  .ps-btn{display:flex;align-items:center;gap:8px;height:40px;padding:8px 14px;box-sizing:border-box;border-radius:4px;border:1px solid #0a2ecc;background:#fff;color:#0a2ecc;font-family:Figtree,system-ui,-apple-system,sans-serif;font-size:15px;font-weight:400;cursor:pointer;white-space:nowrap;line-height:1}
+  .ps-btn:hover{background:#eef1fd}
+  .ps-btn svg{flex:none}
+  .ps-btn .ps-pre{font-size:9px;font-weight:700;letter-spacing:.72px;background:#0a2ecc;color:#fff;border-radius:4px;padding:2px 4px;position:relative;top:-4.5px}
+  .ps-btn.is-pre{border-style:dashed}
   #ps-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2147483000;display:flex;justify-content:flex-end}
   #ps-drawer{width:min(100vw,96vw);height:100%;background:#fff;overflow:auto;padding:28px 36px;box-sizing:border-box;font-family:Figtree,system-ui,-apple-system,sans-serif;color:#2c3546}
   .ps-brand{display:flex;flex-direction:column;gap:2px}
@@ -531,9 +537,9 @@
   `;
 
   function injectCss() {
-    if (document.getElementById('ps-css')) return;
+    if (document.getElementById(`ps-css-${CHANNEL}`)) return;
     const s = document.createElement('style');
-    s.id = 'ps-css';
+    s.id = `ps-css-${CHANNEL}`;
     s.textContent = CSS;
     document.head.appendChild(s);
   }
@@ -550,8 +556,9 @@
 
   function injectButton() {
     const ci = campaignInfo();
-    if (!ci || ci.step !== 'design') { document.getElementById('ps-cta')?.remove(); return; }
-    if (document.getElementById('ps-cta')) return;
+    const ctaId = `ps-cta-${CHANNEL}`;
+    if (!ci || ci.step !== 'design') { document.getElementById(ctaId)?.remove(); return; }
+    if (document.getElementById(ctaId)) return;
     const anchor = document.getElementById('preview-and-test-message-footer-button')
       || [...document.querySelectorAll('button')].find((b) => /Preview and Test Message/i.test(b.textContent || ''));
     if (!anchor) return;
@@ -560,17 +567,19 @@
     // Climb to the wrapper that sits directly in the footer bar (the level where sibling
     // wrappers hold the other footer buttons, e.g. Proofly and "Save and Continue").
     let slot = anchor;
-    const hasSiblingButtons = (el) => [...el.parentElement.children].some((c) => c !== el && c.id !== 'ps-cta' && c.querySelector('button'));
+    const hasSiblingButtons = (el) => [...el.parentElement.children].some((c) => c !== el && !c.classList.contains('ps-cta') && c.querySelector('button'));
     while (slot.parentElement && slot.parentElement !== document.body && !hasSiblingButtons(slot)) slot = slot.parentElement;
     if (!slot.parentElement || slot.parentElement === document.body) return;
     injectCss();
     const wrap = document.createElement('div');
-    wrap.id = 'ps-cta';
+    wrap.id = ctaId;
+    wrap.className = 'ps-cta';
     const btn = document.createElement('button');
-    btn.id = 'ps-btn';
+    btn.id = `ps-btn-${CHANNEL}`;
+    btn.className = IS_PROD ? 'ps-btn' : 'ps-btn is-pre';
     btn.type = 'button';
-    btn.title = "Preview this email for 10 customers in this campaign's audience";
-    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg><span>ProofSet</span>';
+    btn.title = "Preview this email for 10 customers in this campaign's audience" + (IS_PROD ? '' : ' (pre-prod build)');
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg><span>ProofSet</span>' + (IS_PROD ? '' : '<span class="ps-pre">PRE</span>');
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openDrawer(); });
     wrap.appendChild(btn);
     slot.parentElement.insertBefore(wrap, slot);
@@ -589,7 +598,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.1</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.1${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
