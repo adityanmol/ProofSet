@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.0.3
+// @version      1.0.4
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -551,7 +551,9 @@
   .ps-ch{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px}
   .ps-ch .em{color:#0a2ecc;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ps-chr{display:flex;align-items:center;gap:8px;flex:none}
-  .ps-card{border-color:#e1e5ea!important}
+  .ps-card{border-color:#e1e5ea!important;transition:0.5s}
+  .ps-card:hover{box-shadow:5px 10px 20px 0px #00000033;transform:translateY(-10px);cursor:pointer !important}
+  .ps-card .ps-frame{cursor:pointer !important}
   .ps-sub{padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6}
   .ps-flags{padding:8px 12px 0;display:flex;flex-wrap:wrap;gap:4px}
   .ps-flags:empty{display:none}
@@ -565,15 +567,31 @@
   .ps-spin.sm{display:inline-block;width:12px;height:12px;border-width:2px;vertical-align:-1px;margin-right:6px}
   @keyframes ps-r{to{transform:rotate(360deg)}}
   .ps-aud input:disabled{background:#f9fafb}
-  .ps-frame{position:relative;overflow:hidden;cursor:zoom-in;background:#fafafa}
+  .ps-frame{position:relative;overflow:hidden;cursor:pointer;background:#fafafa}
   .ps-frame iframe{border:0;transform-origin:0 0;pointer-events:none;background:#fff;display:block}
   .ps-frame img{width:100%;display:block}
   .ps-load{padding:40px 12px;text-align:center;color:#6b7280;font-size:13px}
   .ps-empty{border:1px dashed #d1d5db;border-radius:8px;padding:48px;text-align:center;color:#4b5563}
   #ps-zoom{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2147483001;display:flex;justify-content:center;align-items:center;padding:24px;box-sizing:border-box}
-  #ps-zoom .wrap{position:relative;background:#fff;border-radius:6px;max-width:100%;max-height:100%;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35)}
-  #ps-zoom iframe{border:0;display:block;margin:0 auto;background:#fff}
-  #ps-zoom .zx{position:fixed;top:10px;right:16px;border:none;background:rgba(255,255,255,.9);border-radius:50%;width:34px;height:34px;font-size:22px;line-height:1;cursor:pointer;color:#111827}
+  /* Proof popup: 740px wide incl. 20px padding = 700px for the email. The email keeps the width it was
+     built at; the popup scrolls sideways only if that width is more than 700px. */
+  .ps-modal{width:min(740px,100%);max-height:100%;display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.35);box-sizing:border-box;overflow:hidden;font-family:Figtree,system-ui,-apple-system,sans-serif;color:#2c3546}
+  .ps-mh{padding:20px 20px 14px;border-bottom:1px solid #e1e5ea}
+  .ps-mtitle{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .ps-mtitle h3{margin:0;font-size:20px;font-weight:600;line-height:1.3;color:#2c3546}
+  .ps-mtitle h3 .who{color:#0a2ecc}
+  .ps-mclose{border:0;background:none;padding:0 2px;font-size:26px;line-height:1;color:#656f85;cursor:pointer}
+  .ps-mclose:hover{color:#2c3546}
+  .ps-msub{margin-top:10px;font-size:14px;line-height:1.4;word-break:break-word}
+  .ps-mpre{margin-top:2px;font-size:12px;color:#656f85;word-break:break-word}
+  .ps-mtools{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;margin-top:12px;flex-wrap:wrap}
+  .ps-mchips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:#656f85}
+  .ps-mchips .kb{font-weight:600;color:#2c3546}
+  .ps-mright{display:flex;align-items:center;gap:14px}
+  .ps-mopen{display:inline-flex;align-items:center;gap:5px;color:#0a2ecc;font-size:13px;text-decoration:none;white-space:nowrap}
+  .ps-mopen:hover{text-decoration:underline}
+  .ps-mb{flex:1;min-height:0;overflow:auto;padding:20px;background:#f7f8fa}
+  .ps-mb iframe{display:block;margin:0 auto;border:0;background:#fff;box-shadow:0 0 0 1px #e1e5ea}
   @media (max-width:768px){
     #ps-drawer{width:100vw;padding:16px}
     .ps-logo{font-size:26px}
@@ -654,7 +672,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.3${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.4${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
@@ -912,7 +930,7 @@
       try { new ResizeObserver(layout).observe(frame); } catch (e) { /* ignore */ }
       ifr.srcdoc = neutralizeTrackers(r.html);
       layout();
-      frame.onclick = () => zoom(r.html);
+      card.onclick = () => zoom(r, card);
     }
 
     function paintFlags(card, flags) {
@@ -920,37 +938,67 @@
       box.innerHTML = flags.map((f) => `<span class="ps-flag ${f.level}">${esc(f.text)}</span>`).join('');
     }
 
-    function zoom(html) {
+    // Full-size proof popup for one customer: who, subject, preheader, size, design tag, warnings,
+    // desktop / mobile width, and "Open in new tab" (this customer's proof, trackers removed).
+    function zoom(r, card) {
       const z = document.createElement('div');
       z.id = 'ps-zoom';
-      z.innerHTML = '<button class="zx" title="Close">&times;</button><div class="wrap"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe></div>';
-      const wrap = z.querySelector('.wrap');
+      const verHtml = card ? card.querySelector('.ps-ver').innerHTML : '';
+      const flagsHtml = card ? card.querySelector('.ps-flags').innerHTML : '';
+      z.innerHTML = `<div class="ps-modal" role="dialog" aria-modal="true" aria-label="Proof for ${esc(r.user.label)}">
+          <div class="ps-mh">
+            <div class="ps-mtitle"><h3>Proof for <span class="who">${esc(r.user.label)}</span></h3><button class="ps-mclose" title="Close (Esc)">&times;</button></div>
+            <div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>
+            ${r.preHeader ? `<div class="ps-mpre">Preheader: ${esc(r.preHeader)}</div>` : ''}
+            <div class="ps-mtools">
+              <div class="ps-mchips"><span class="kb">${kb(r.bytes || 0)} KB</span>${verHtml}${flagsHtml}</div>
+              <div class="ps-mright">
+                <span class="ps-seg" role="group" aria-label="Preview width"><button type="button" data-w="desktop" class="on">Desktop</button><button type="button" data-w="mobile">Mobile</button></span>
+                <a class="ps-mopen" target="_blank" rel="noopener" href="${proofBlobUrl(r.html)}">Open in new tab &#8599;</a>
+              </div>
+            </div>
+          </div>
+          <div class="ps-mb"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe></div>
+        </div>`;
       const ifr = z.querySelector('iframe');
-      const close = () => { z.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', layout); };
+      const close = () => { z.remove(); document.removeEventListener('keydown', onKey); };
       const onKey = (e) => { if (e.key === 'Escape') close(); };
       document.addEventListener('keydown', onKey);
-      z.querySelector('.zx').onclick = close;
+      z.querySelector('.ps-mclose').onclick = close;
       z.addEventListener('click', (e) => { if (e.target === z) close(); });
 
-      // The email keeps its real width (or the screen width on small screens, where its own
-      // mobile styles apply). The iframe is as tall as the email, and the wrapper caps at the
-      // viewport: long emails scroll inside the modal, short ones shrink to fit.
-      const avail = () => Math.max(280, window.innerWidth - 48);
+      // Desktop: the email's own built width (measured; 600px for most templates). The 700px body
+      // scrolls sideways only when that width is larger. Mobile: 375px, so the email's mobile styles apply.
+      const MOBILE_W = 375;
+      let mode = 'desktop';
       let natural = { w: 600, h: 400 };
       const layout = () => {
-        const w = Math.min(natural.w, avail() - 16);
-        ifr.style.width = w + 'px';
+        ifr.style.width = (mode === 'mobile' ? MOBILE_W : natural.w) + 'px';
         ifr.style.height = natural.h + 'px';
-        wrap.style.width = w + 'px';
-        // Add room for the wrapper's own scrollbar so the email is never clipped on the right.
-        const sb = wrap.offsetWidth - wrap.clientWidth;
-        if (sb > 0) wrap.style.width = (w + sb) + 'px';
       };
+      const segBtns = [...z.querySelectorAll('.ps-seg button')];
+      segBtns.forEach((b) => {
+        b.onclick = () => {
+          mode = b.dataset.w;
+          if (mode === 'desktop') {
+            // Re-measure at the base width: responsive emails fill 600, fixed-width ones report their own width.
+            ifr.style.width = '600px';
+            const sz = contentSize(ifr);
+            natural.w = Math.max(320, sz && sz.w ? sz.w : 600);
+          }
+          segBtns.forEach((x) => x.classList.toggle('on', x === b));
+          layout();
+        };
+      });
       layout();
       document.body.appendChild(z);
-      watchSize(ifr, (s) => { natural = { w: Math.max(320, s.w), h: s.h }; layout(); });
-      window.addEventListener('resize', layout);
-      ifr.srcdoc = prepareForDisplay(html).html;
+      watchSize(ifr, (sz) => {
+        if (mode === 'desktop') natural.w = Math.max(320, sz.w);
+        natural.h = sz.h;
+        layout();
+      });
+      ifr.srcdoc = prepareForDisplay(r.html).html;
+      z.querySelector('.ps-mclose').focus();
     }
 
     function showStoredOrEmpty() {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4
+
+- Card hover: the card lifts 10px with a soft shadow (0.5s transition); the whole card is clickable with a pointer cursor.
+- New proof popup, 740px wide with 20px padding (700px for the email). The email shows at the width it was built at (measured: 600px for most templates); the popup scrolls sideways only when that width is more than 700px. Long emails scroll inside the popup.
+- Popup header: "Proof for <masked customer>", subject, preheader, size, design tag and any warnings, a Desktop / Mobile (375px) switch, and "Open in new tab" (this customer's proof, trackers removed). Close with the X, Esc or a click outside.
+
 ## 1.0.3
 
 - Fix: pages kept loading forever. The email's tracking pixel (pxl.mon-trk.com, carrying the partner code) never answers preview traffic, so every proof card, the full-size view and the "View in browser" tab waited on it indefinitely. Tracking images (tracker hosts, 1x1 or hidden images) are now replaced with a blank 1x1 in everything ProofSet displays, so viewing a proof never fires a tracker or counts as an open. Size, design grouping and the Gmail check still use the untouched email.
