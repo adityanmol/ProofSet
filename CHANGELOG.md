@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6
+
+- Update notice on the ProofSet button. When a newer version is published on this build's own branch (main for production, pre-prod for pre-prod), an orange "Update vX.Y.Z" badge appears on the button. Clicking it opens a small prompt with Later / Update; Update opens the Tampermonkey install page in a new tab and the badge turns into "Refresh to finish". On returning to the IO tab the prompt asks to refresh (with a reminder to save the design first). After the refresh, the button briefly shows "Updated to vX.Y.Z".
+- The version check calls GitHub only (never IO), at most once every 6 hours, only when the ProofSet button is added on a Design page, and fetches just the first 1 KB of the script. If GitHub cannot be reached, nothing is shown.
+- `VERSION` constant in the code drives the drawer label; `build.js` refuses to build if it differs from `@version`.
+
 ## 1.0.5
 
 - Fix: the "Sort by design" control disappeared for some audiences (often a custom audience chosen via Change audience). It was shown only when the sample had more than one distinct design. It now shows whenever 2 or more proofs rendered, for any audience; when every customer sees the same design, the options are disabled and marked "all the same", with the reason on hover.

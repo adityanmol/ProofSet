@@ -6,7 +6,7 @@ Bluecore shows proofs of a campaign for several customers from its audience on t
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0** (1.0.5 in pre-prod validation).
+Current stable version: **1.0.0** (1.0.6 in pre-prod validation).
 
 ## Install
 
@@ -15,6 +15,12 @@ Current stable version: **1.0.0** (1.0.5 in pre-prod validation).
 3. Open any IO panel (`https://<panel>.inone.useinsider.com`).
 
 Updates: the script declares `@updateURL`, so Tampermonkey picks up new versions pushed to `main` on its regular update check (or via Tampermonkey > Utilities > Check for userscript updates).
+
+### Updates inside IO
+
+When a newer version is published, the ProofSet button shows an **Update vX.Y.Z** badge. Click it, choose **Update** (Tampermonkey opens; confirm there), come back and choose **Refresh page**. The check asks GitHub at most once every 6 hours and never calls IO.
+
+To release: bump `@version` and `const VERSION` together in `ProofSet.user.js` (build.js checks they match), run `node build.js`, commit and push.
 
 ### Pre-prod build
 

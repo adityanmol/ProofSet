@@ -28,6 +28,11 @@ function replaceOnce(text, pattern, replacement, label) {
 
 function build() {
   let s = fs.readFileSync(SRC, 'utf8');
+  const headerVer = (s.match(/^\/\/ @version\s+(\S+)$/m) || [])[1];
+  const codeVer = (s.match(/^\s*const VERSION = '([^']+)';$/m) || [])[1];
+  if (!headerVer || headerVer !== codeVer) {
+    throw new Error(`build.js: @version (${headerVer}) and const VERSION (${codeVer}) must match`);
+  }
   s = replaceOnce(s, /^\/\/ @name\s+.*$/m, '// @name         ProofSet (pre-prod)', '@name');
   s = replaceOnce(s, /^\/\/ @namespace\s+.*$/m, '// @namespace    bluecore.cam.proofset.preprod', '@namespace');
   s = replaceOnce(s, /^\/\/ @description\s+(.*)$/m, '// @description  [pre-prod] $1', '@description');

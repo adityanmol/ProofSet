@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.0.5
+// @version      1.0.6
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -47,6 +47,11 @@
   // Release channel. 'prod' in ProofSet.user.js; build.js writes 'pre-prod' into ProofSet.preprod.user.js.
   const CHANNEL = 'prod';
   const IS_PROD = CHANNEL === 'prod';
+  // Must match @version in the header (build.js checks this).
+  const VERSION = '1.0.6';
+  const UPDATE_URL = IS_PROD
+    ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
+    : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
 
   const CFG = {
     sampleSize: 10,
@@ -494,7 +499,17 @@
 
   const CSS = `
   /* Theme follows the IO panel: primary #0a2ecc, subtle #dae1fb, text #2c3546 / #656f85, Figtree, 4px radius */
-  .ps-cta{display:flex;align-items:center;margin-right:12px}
+  .ps-cta{position:relative;display:flex;align-items:center;margin-right:12px}
+  .ps-btn{position:relative}
+  .ps-upd{position:absolute;top:-10px;right:-10px;z-index:2;border:2px solid #fff;border-radius:10px;padding:2px 7px;background:#f79009;color:#fff;font:700 9.5px/1.2 Figtree,system-ui,-apple-system,sans-serif;letter-spacing:.3px;white-space:nowrap;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .ps-upd.is-refresh{background:#0a2ecc}
+  .ps-upd.is-done{background:#12b76a;cursor:default}
+  .ps-pop{position:absolute;bottom:calc(100% + 12px);right:0;width:300px;box-sizing:border-box;z-index:2147482999;background:#fff;border:1px solid #e1e5ea;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:14px 16px;font:13px/1.45 Figtree,system-ui,-apple-system,sans-serif;color:#2c3546;text-align:left}
+  .ps-pop.below{bottom:auto;top:calc(100% + 12px)}
+  .ps-pop h4{margin:0 0 6px;font-size:14px;font-weight:600;color:#2c3546}
+  .ps-pop p{margin:0 0 12px;color:#656f85}
+  .ps-pop .row{display:flex;justify-content:flex-end;gap:8px}
+  .ps-pop .ps-b{height:32px;font-size:13px}
   /* Proofly re-inserts its CTA right before "Preview and Test Message"; keep it visually first
      so the footer reads: Proofly | ProofSet | Preview and Test Message | Save and Continue. */
   #ecp-cta{order:-1}
@@ -628,6 +643,109 @@
     setTimeout(() => t.remove(), 3500);
   }
 
+  /* ---------------- update notice ---------------- */
+
+  // Checks this build's own install URL on GitHub (never IO) at most once every 6 hours, and only
+  // when the ProofSet button is added on a Design page. If a newer version exists, a badge on the
+  // button offers the update; after installing it in Tampermonkey, the badge asks to refresh.
+  const UPD_CHECK_KEY = `proofset:update-check:${CHANNEL}`;
+  const UPD_PENDING_KEY = `proofset:update-pending:${CHANNEL}`;
+  const UPD_EVERY_MS = 6 * 60 * 60 * 1000;
+  const cmpVer = (a, b) => {
+    const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) { const d = (x.at(i) || 0) - (y.at(i) || 0); if (d) return d > 0 ? 1 : -1; }
+    return 0;
+  };
+  async function latestVersion() {
+    const cached = readLS(UPD_CHECK_KEY);
+    if (cached && Date.now() - cached.at < UPD_EVERY_MS) return cached.latest;
+    try {
+      const res = await fetch(UPDATE_URL, { cache: 'no-store', headers: { Range: 'bytes=0-1023' } });
+      if (!res.ok) return cached ? cached.latest : null;
+      const m = (await res.text()).match(/@version\s+([0-9]+(?:\.[0-9]+){0,2})/);
+      const latest = m ? m[1] : null;
+      localStorage.setItem(UPD_CHECK_KEY, JSON.stringify({ at: Date.now(), latest }));
+      return latest;
+    } catch (e) {
+      return cached ? cached.latest : null; // offline or blocked: stay quiet
+    }
+  }
+  function initUpdateNotice(wrap) {
+    const pending = readLS(UPD_PENDING_KEY);
+    if (pending && cmpVer(VERSION, pending.version) >= 0) {
+      // The refresh after an update: confirm briefly, then clear.
+      localStorage.removeItem(UPD_PENDING_KEY);
+      const done = document.createElement('span');
+      done.className = 'ps-upd is-done';
+      done.textContent = `Updated to v${VERSION}`;
+      (wrap.querySelector('.ps-btn') || wrap).appendChild(done);
+      setTimeout(() => done.remove(), 6000);
+      return;
+    }
+    latestVersion().then((latest) => {
+      if (!latest || cmpVer(latest, VERSION) <= 0 || !wrap.isConnected) return;
+      showUpdateBadge(wrap, latest);
+    });
+  }
+  function showUpdateBadge(wrap, latest) {
+    wrap.querySelector('.ps-upd')?.remove();
+    const badge = document.createElement('span');
+    badge.className = 'ps-upd';
+    badge.setAttribute('role', 'button');
+    badge.tabIndex = 0;
+    const isPending = () => { const p = readLS(UPD_PENDING_KEY); return p && p.version === latest; };
+    const paint = () => {
+      badge.classList.toggle('is-refresh', !!isPending());
+      badge.textContent = isPending() ? 'Refresh to finish' : `Update v${latest}`;
+      badge.title = isPending() ? `Refresh the page to start using ProofSet v${latest}` : `ProofSet v${latest} is available (you have v${VERSION})`;
+    };
+    paint();
+    const closePop = () => wrap.querySelector('.ps-pop')?.remove();
+    const openPop = () => {
+      closePop();
+      const pop = document.createElement('div');
+      pop.className = 'ps-pop';
+      pop.setAttribute('role', 'dialog');
+      if (!isPending()) {
+        pop.innerHTML = `<h4>Update available: v${esc(latest)}</h4>
+          <p>You have v${esc(VERSION)}. Tampermonkey opens in a new tab; click <b>Update</b> there, then come back here.</p>
+          <div class="row"><button type="button" class="ps-b sec" data-a="later">Later</button><button type="button" class="ps-b" data-a="update">Update</button></div>`;
+      } else {
+        pop.innerHTML = `<h4>Refresh to finish the update</h4>
+          <p>Once v${esc(latest)} is installed in Tampermonkey, refresh this page to start using it. Save your design first: refreshing reloads the IO editor.</p>
+          <div class="row"><button type="button" class="ps-b sec" data-a="later">Later</button><button type="button" class="ps-b" data-a="refresh">Refresh page</button></div>`;
+      }
+      pop.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const a = e.target.closest('button') && e.target.closest('button').dataset.a;
+        if (a === 'later') closePop();
+        if (a === 'update') {
+          localStorage.setItem(UPD_PENDING_KEY, JSON.stringify({ version: latest, at: Date.now() }));
+          window.open(UPDATE_URL, '_blank', 'noopener');
+          paint();
+          openPop(); // switch straight to the refresh step
+        }
+        if (a === 'refresh') location.reload();
+      });
+      wrap.appendChild(pop);
+      // Open above the button when there is room (IO's footer sits at the bottom), else below.
+      if (pop.getBoundingClientRect().top < 8) pop.classList.add('below');
+      const r = pop.getBoundingClientRect();
+      if (r.left < 8) pop.style.right = `${r.left - 8}px`;
+    };
+    badge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); wrap.querySelector('.ps-pop') ? closePop() : openPop(); });
+    badge.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); badge.click(); } });
+    document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) closePop(); });
+    // Back from the Tampermonkey tab: show the refresh step.
+    let autoOpened = false;
+    window.addEventListener('focus', () => {
+      if (!isPending() || !wrap.isConnected) return;
+      paint();
+      if (!autoOpened && !wrap.querySelector('.ps-pop')) { autoOpened = true; openPop(); }
+    });
+    (wrap.querySelector('.ps-btn') || wrap).appendChild(badge);
+  }
+
   function injectButton() {
     const ci = campaignInfo();
     const ctaId = `ps-cta-${CHANNEL}`;
@@ -657,6 +775,7 @@
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openDrawer(); });
     wrap.appendChild(btn);
     slot.parentElement.insertBefore(wrap, slot);
+    initUpdateNotice(wrap);
   }
 
   function openDrawer() {
@@ -672,7 +791,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.5${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v${VERSION}${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
