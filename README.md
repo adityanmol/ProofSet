@@ -6,7 +6,7 @@ Bluecore shows proofs of a campaign for several customers from its audience on t
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0** (1.2.4 in pre-prod validation).
+Current stable version: **1.0.0** (1.2.5 in pre-prod validation).
 
 ## Install
 
@@ -47,7 +47,7 @@ If the repository is private, the raw link only works for people with access; in
 
 1. Open an email campaign. Visit the **Recipients** step once: ProofSet quietly saves the campaign's selected static or dynamic segment in the background.
 2. Go to the **Design** step and click **ProofSet** (next to "Preview and Test Message").
-3. If ProofSet doesn't know the audience yet, a segment field appears. Type part of a segment's name (or its ID) and pick it from the list, or paste the segment's link and press **Use segment** (or Enter). To switch audiences later, use **Change audience** next to Refresh Proofs. If the segment has no customers with an email address, ProofSet warns you and shows one test proof for test@useinsider.com. Accepted link shapes (`<panel>` and `<id>` are whatever your segment uses; anything after the id, such as `?currentTab=...` or `/contacts`, is ignored):
+3. To preview a different segment, click **Change audience** (or **Select audience** when ProofSet doesn't know the campaign's audience) next to Refresh Proofs. A dropdown opens: type part of a segment's name (or its ID) and pick it, or paste the segment's link and press Enter. The link then shows the segment's name; **Reset audience** goes back. If the segment has no customers with an email address, ProofSet warns you and shows one test proof for test@useinsider.com. Accepted link shapes (`<panel>` and `<id>` are whatever your segment uses; anything after the id, such as `?currentTab=...` or `/contacts`, is ignored):
    - `https://<panel>.inone.useinsider.com/dynamic-segments/<id>`
    - `https://<panel>.inone.useinsider.com/static-segments/<id>`
 

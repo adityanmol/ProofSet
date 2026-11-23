@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.5
+
+- The segment picker now opens as a dropdown right under "Change audience" in the header (search field + list; a pasted segment link still works with Enter), instead of a separate bar across the drawer. It closes on pick, Esc or a click outside.
+- The link's label shows where you are: "Change audience" for the campaign's own audience, "Select audience" when no audience is known, and the chosen segment's name (up to 28 characters, full name on hover) after you pick one by hand. Reset audience puts it back to "Change audience" / "Select audience".
+- The picker no longer opens by itself when a segment is invalid or the audience is unknown; the warning above the test proof points to it instead.
+
 ## 1.2.4
 
 - Reset audience now shows whenever you picked a segment by hand, including for campaigns with no segment ProofSet can use (for example, attribute rules, or a campaign whose Recipients step was never opened). Resetting there removes the chosen segment and shows the test proof for test@useinsider.com with the "couldn't find this campaign's audience" note. When the campaign's own segment is known, Reset goes back to it as before.

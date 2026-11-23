@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.2.4
+// @version      1.2.5
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.4';
+  const VERSION = '1.2.5';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -613,8 +613,18 @@
   .ps-seg button + button{border-left:1px solid #b7c3f7}
   .ps-seg button:hover{background:#eef1fd}
   .ps-seg button.on{background:#0a2ecc;color:#fff}
-  .ps-aud{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;align-items:center;font-size:13px;color:#656f85;background:#f7f8fa;border:1px solid #e1e5ea;border-radius:4px;padding:10px 12px}
+  .ps-audpick{position:relative}
+  .ps-audbtn{display:inline-flex;align-items:center;gap:6px;max-width:260px;border:0;background:none;padding:0;color:#0a2ecc;font-family:inherit;font-size:13px;cursor:pointer}
+  .ps-audbtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-audbtn:hover .lbl{text-decoration:underline}
+  .ps-audbtn:disabled{color:#9aa3b2;cursor:default}
+  .ps-audbtn .car{flex:none;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;transition:transform .15s ease}
+  .ps-audbtn.open .car{transform:rotate(180deg)}
+  .ps-aud{position:absolute;top:calc(100% + 8px);right:0;z-index:20;width:min(420px,calc(100vw - 32px));box-sizing:border-box;padding:10px;background:#fff;border:1px solid #e1e5ea;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.15);font-size:13px;color:#656f85;text-align:left}
   .ps-aud[hidden]{display:none}
+  .ps-aud .ps-combo{display:block;max-width:none}
+  .ps-aud .ps-aud-list{position:static;margin-top:6px;max-height:300px;border:0;border-top:1px solid #eef0f3;border-radius:0;box-shadow:none;padding:4px 0 0}
+  .ps-aud-hint{margin-top:6px;font-size:11px;color:#8a93a5}
   .ps-combo{position:relative;flex:1 1 360px;max-width:560px;min-width:0;display:flex}
   .ps-aud-list{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:10;max-height:280px;overflow:auto;background:#fff;border:1px solid #c9d0d9;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px 0}
   .ps-aud-list[hidden]{display:none}
@@ -624,7 +634,7 @@
   .ps-opt .ty{flex:none;font-size:11px;color:#656f85}
   .ps-opt .cur{flex:none;font-size:11px;color:#0a2ecc;font-weight:600}
   .ps-opt-empty{padding:8px 10px;font-size:13px;color:#656f85}
-  .ps-aud input{flex:1 1 auto;width:100%;min-width:0;height:32px;border:1px solid #c9d0d9;border-radius:4px;padding:0 8px;font-family:inherit;color:#2c3546;background:#fff}
+  .ps-aud input{display:block;box-sizing:border-box;width:100%;min-width:0;height:32px;border:1px solid #c9d0d9;border-radius:4px;padding:0 8px;font-family:inherit;color:#2c3546;background:#fff}
   .ps-aud input:focus{outline:none;border-color:#0a2ecc;box-shadow:0 0 0 2px #dae1fb}
   .ps-link{border:0;background:none;padding:0;color:#0a2ecc;font-family:inherit;font-size:13px;cursor:pointer}
   .ps-link:hover{text-decoration:underline}
@@ -721,8 +731,6 @@
     .ps-actions{margin-left:auto}
     .ps-bar{margin-top:14px}
     .ps-b{height:34px;padding:0 10px;font-size:13px}
-    .ps-aud{font-size:12px}
-    .ps-combo{flex:1 1 100%;max-width:none}
     .ps-meta{font-size:14px}
     .ps-bar{align-items:flex-start}
     .ps-empty{padding:28px 16px}
@@ -918,20 +926,21 @@
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
-            <button class="ps-link" id="ps-aud-toggle" hidden>Change audience</button>
+            <div class="ps-audpick">
+              <button type="button" class="ps-audbtn" id="ps-aud-toggle" aria-haspopup="listbox" aria-expanded="false"><span class="lbl">Change audience</span><span class="car" aria-hidden="true"></span></button>
+              <div class="ps-aud" id="ps-aud" hidden>
+                <div class="ps-combo">
+                  <input id="ps-aud-link" role="combobox" aria-expanded="false" aria-controls="ps-aud-list" aria-autocomplete="list" autocomplete="off"
+                    placeholder="Search segments by name or ID" aria-label="Search segments">
+                  <div class="ps-aud-list" id="ps-aud-list" role="listbox" hidden></div>
+                </div>
+                <div class="ps-aud-hint">You can also paste a segment link and press Enter.</div>
+                <button type="button" id="ps-aud-set" hidden>Use segment</button>
+              </div>
+            </div>
             <button class="ps-b" id="ps-refresh">Refresh Proofs</button>
             <button class="ps-x" id="ps-close" title="Close">&times;</button>
           </div>
-        </div>
-        <div class="ps-aud" id="ps-aud" hidden>
-          <span id="ps-aud-label">Segment:</span>
-          <div class="ps-combo">
-            <input id="ps-aud-link" role="combobox" aria-expanded="false" aria-controls="ps-aud-list" aria-autocomplete="list" autocomplete="off"
-              placeholder="Search segments by name or ID, or paste a segment link">
-            <div class="ps-aud-list" id="ps-aud-list" role="listbox" hidden></div>
-          </div>
-          <button class="ps-b" id="ps-aud-set">Use segment</button>
-          <button class="ps-link" id="ps-aud-cancel" hidden>Cancel</button>
         </div>
         <div class="ps-bar">
           <div class="ps-meta" id="ps-meta"></div>
@@ -965,23 +974,30 @@
 
     const state = { aud: getAudience(ci.id) };
 
-    // The link field is only shown when no audience is known, or when the user asks to change it.
+    // Segment picker: a small dropdown that opens under "Select / Change audience".
     const showAudEdit = (show) => {
       $('ps-aud').hidden = !show;
-      $('ps-aud-cancel').hidden = !state.aud;
-      $('ps-aud-label').textContent = state.aud ? 'Use a different segment:' : 'Segment:';
-      if (!show) closeList();
-      if (show) setTimeout(() => $('ps-aud-link').focus(), 0);
+      $('ps-aud-toggle').setAttribute('aria-expanded', String(show));
+      $('ps-aud-toggle').classList.toggle('open', show);
+      if (!show) { closeList(); $('ps-aud-link').value = ''; }
+      else setTimeout(() => $('ps-aud-link').focus(), 0);
     };
+    const AUD_LABEL_MAX = 28; // characters shown for a chosen segment's name; the full name is in the tooltip
+    const trunc = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1).trimEnd() + '…' : String(t));
     const paintAudience = () => {
-      const t = $('ps-aud-toggle');
-      t.hidden = !state.aud;
-      if (state.aud) t.title = `Current: ${state.aud.name} (${state.aud.type} segment #${state.aud.id}${state.aud.source === 'manual' ? ', chosen manually' : ', from the campaign'})`;
       // Shown whenever a segment was chosen by hand (and it isn't the campaign's own). Reset goes back
       // to the campaign's audience, or, when the campaign has none ProofSet can use, to the test proof.
       const camp = getCampaignAudience(ci.id);
+      const manual = !!(state.aud && state.aud.source === 'manual' && !(camp && sameAud(camp, state.aud)));
+      const t = $('ps-aud-toggle');
+      t.querySelector('.lbl').textContent = manual ? trunc(state.aud.name, AUD_LABEL_MAX) : state.aud ? 'Change audience' : 'Select audience';
+      t.title = manual
+        ? `Audience: ${state.aud.name} (${state.aud.type} segment #${state.aud.id}). Click to change.`
+        : state.aud
+          ? `Campaign audience: ${state.aud.name} (${state.aud.type} segment #${state.aud.id}). Click to pick a different segment.`
+          : 'Pick a segment to preview this email for its customers.';
       const r = $('ps-aud-reset');
-      r.hidden = !(state.aud && state.aud.source === 'manual' && !(camp && sameAud(camp, state.aud)));
+      r.hidden = !manual;
       if (!r.hidden) {
         r.title = camp
           ? `Back to the campaign's audience: ${camp.name} (${camp.type} segment #${camp.id})`
@@ -1000,7 +1016,6 @@
       if (v) await renderProofs(v);
       else await pickAndRender();
     });
-    $('ps-aud-cancel').onclick = () => { $('ps-aud-link').value = ''; showAudEdit(false); };
 
     /* Loading state with rotating messages, so the user always knows work is happening. */
     const FUN = [
@@ -1038,14 +1053,13 @@
       let picked;
       try { picked = await pickRandomUsers(ci.id, state.aud); } catch (e) {
         if (!e.code) throw e;
-        return renderTestProof(`${esc(e.message)} Please link or choose a valid segment.`);
+        return renderTestProof(`${esc(e.message)} Please choose a valid segment with <b>Change audience</b> above.`);
       }
       await renderProofs(picked);
     }
 
     // One proof for the test profile, under a warning, instead of a blank drawer.
     async function renderTestProof(warnHtml) {
-      showAudEdit(true);
       await renderProofs({ users: [TEST_USER], more: false, total: 1, test: true, warn: warnHtml });
     }
 
@@ -1121,7 +1135,7 @@
       if (e.key === 'ArrowDown' && open) { e.preventDefault(); pick.hi = Math.min(pick.shown.length - 1, pick.hi + 1); paintList(); }
       else if (e.key === 'ArrowUp' && open) { e.preventDefault(); pick.hi = Math.max(0, pick.hi - 1); paintList(); }
       else if (e.key === 'Enter') { e.preventDefault(); if (open && pick.hi >= 0 && !isLink(inp.value)) choose(pick.hi); else $('ps-aud-set').click(); }
-      else if (e.key === 'Escape') { e.stopPropagation(); closeList(); }
+      else if (e.key === 'Escape') { e.stopPropagation(); showAudEdit(false); $('ps-aud-toggle').focus(); }
     });
     listEl().addEventListener('mousedown', (e) => {
       const o = e.target.closest('.ps-opt');
@@ -1129,7 +1143,7 @@
       e.preventDefault(); // keep focus in the field
       choose(Number(o.dataset.i));
     });
-    ov.addEventListener('mousedown', (e) => { if (!e.target.closest('.ps-combo')) closeList(); });
+    ov.addEventListener('mousedown', (e) => { if (!$('ps-aud').hidden && !e.target.closest('.ps-audpick')) showAudEdit(false); });
 
     $('ps-aud-set').onclick = () => run(async () => {
       const link = $('ps-aud-link').value.trim();
@@ -1166,7 +1180,7 @@
       await pickAndRender();
     });
 
-    const NO_AUD_MSG = "ProofSet couldn't find this campaign's audience yet. Search for a segment above (or paste its link), "
+    const NO_AUD_MSG = "ProofSet couldn't find this campaign's audience yet. Use <b>Select audience</b> above to pick a segment, "
       + 'or open the <b>Recipients</b> step once and ProofSet picks up the campaign\'s segment by itself.';
 
     async function renderProofs(view, opts = {}) {
