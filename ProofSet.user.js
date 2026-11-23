@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.2.0
+// @version      1.2.1
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -48,7 +48,7 @@
   const CHANNEL = 'prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -274,12 +274,12 @@
     sessionStorage.setItem(SS_USERS(cid, aud), JSON.stringify(st));
     return storedView(st);
   }
-  // Customers currently shown, from the session store (also reads the pre-1.1.1 format).
+  // Customers currently shown, from the session store. Samples saved by versions before 1.2.0
+  // (a fixed 10, no batches) are ignored, so a fresh sample of 8 with "Load more" is gathered instead.
   function storedView(st) {
-    if (!st) return null;
-    if (st.order && st.order.length) return { users: st.order.slice(0, st.shown), pool: st.pool, more: st.order.length > st.shown, total: st.order.length };
-    if (st.users && st.users.length) return { users: st.users, pool: st.pool, more: false, total: st.users.length };
-    return null;
+    if (!st || !st.order || !st.order.length) return null;
+    const shown = Math.max(1, Math.min(st.shown || CFG.sampleSize, st.order.length));
+    return { users: st.order.slice(0, shown), pool: st.pool, more: st.order.length > shown, total: st.order.length };
   }
   // Adds the next batch of customers from the same shuffled pool (no new segment call).
   function loadMoreUsers(cid, aud) {

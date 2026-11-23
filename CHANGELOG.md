@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Fix: a tab that already had a sample saved by an older version kept showing those 10 customers with no "Load more proofs". Samples saved before 1.2.0 are now ignored, so ProofSet gathers a fresh 8 (one segment lookup) and the button appears.
+
 ## 1.2.0
 
 - Proofs load 8 at a time. A "Load more proofs" button under the grid adds the next 8 from the same shuffled sample (no new segment call; proofs already shown come from cache, so only the new customers are rendered). It disappears once every loaded customer is shown. Refresh Proofs starts over with a fresh 8.
