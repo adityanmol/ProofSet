@@ -2,11 +2,11 @@
 
 A Bluecore-style **proof set** inside the InsiderOne (IO) email editor.
 
-Bluecore shows proofs of a campaign for several customers from its audience on the campaign summary page. IO only previews one user at a time ("Previewing As" in the Preview and Test Message modal). ProofSet fills the gap: it runs IO's own single-user preview for 10 customers from the campaign audience and shows the results side by side in one grid.
+Bluecore shows proofs of a campaign for several customers from its audience on the campaign summary page. IO only previews one user at a time ("Previewing As" in the Preview and Test Message modal). ProofSet fills the gap: it runs IO's own single-user preview for customers from the campaign audience, 8 at a time, and shows the results side by side in one grid.
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0** (1.1.0 in pre-prod validation).
+Current stable version: **1.0.0** (1.2.0 in pre-prod validation).
 
 ## Install
 
@@ -52,7 +52,7 @@ If the repository is private, the raw link only works for people with access; in
    - `https://<panel>.inone.useinsider.com/static-segments/<id>`
 
    For example, `.../dynamic-segments/76?currentTab=users-segment` or `.../static-segments/2/contacts`.
-4. Proofs start rendering straight away. **Refresh Proofs** shows a different set of 10 customers.
+4. Proofs start rendering straight away. **Load more proofs** under the grid adds the next 8. **Refresh Proofs** starts over with a different 8.
 
 ### What each card shows
 
@@ -68,7 +68,7 @@ The header shows the average size as "Estimated Template Size", like Bluecore.
 
 ### Session behaviour
 
-The 10 customers picked for a campaign and segment are kept in **sessionStorage** (Profile ID and masked email only). Reopening ProofSet in the same tab shows the same customers, rendered from the current (including unsaved) design. If none are stored and the audience is known, ProofSet gathers 10 customers and renders straight away. **Refresh Proofs** picks a different 10. Closing the tab clears them.
+The customers picked for a campaign and segment (a shuffled sample, plus how many are shown) are kept in **sessionStorage** (Profile ID and masked email only). Reopening ProofSet in the same tab shows the same customers, rendered from the current (including unsaved) design. If none are stored and the audience is known, ProofSet gathers 8 customers and renders straight away. **Refresh Proofs** picks a different 8. Closing the tab clears them.
 
 The campaign's audience (segment id and name only, no PII) is kept in **localStorage** per panel and campaign. A segment chosen via **Change audience** is stored separately and used instead; **Reset audience** (shown only when the campaign's own audience is known) removes it and brings back proofs for the real audience.
 

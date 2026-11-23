@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.1.0
-// @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
+// @version      1.2.0
+// @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
 // @run-at       document-idle
@@ -50,13 +50,13 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
 
   const CFG = {
-    sampleSize: 10,
+    sampleSize: 8, // proofs per batch; "Load more proofs" adds another batch
     concurrency: 2, // preview renders in flight at once
     pollTries: 8, // segment users: at most 8 checks...
     pollDelayMs: 2000, // ...2 s apart, then give up (only after a user click)
@@ -270,12 +270,26 @@
     if (contacts.length && (!hit || hit.contacts !== contacts)) contactsCache.set(ck, { at: Date.now(), contacts });
     const usable = contacts.filter((c) => c.insider_id);
     if (!usable.length) throw new Error('No users found in this segment.');
-    const picked = shuffle(usable).slice(0, CFG.sampleSize).map((c) => ({
-      insiderId: c.insider_id,
-      label: maskEmail(c.email),
-    }));
-    sessionStorage.setItem(SS_USERS(cid, aud), JSON.stringify({ users: picked, pool: usable.length, at: Date.now() }));
-    return { users: picked, pool: usable.length };
+    // The whole loaded pool is shuffled once; batches of CFG.sampleSize are shown from it in order.
+    const order = shuffle(usable).map((c) => ({ insiderId: c.insider_id, label: maskEmail(c.email) }));
+    const st = { order, shown: Math.min(CFG.sampleSize, order.length), pool: usable.length, at: Date.now() };
+    sessionStorage.setItem(SS_USERS(cid, aud), JSON.stringify(st));
+    return storedView(st);
+  }
+  // Customers currently shown, from the session store (also reads the pre-1.1.1 format).
+  function storedView(st) {
+    if (!st) return null;
+    if (st.order && st.order.length) return { users: st.order.slice(0, st.shown), pool: st.pool, more: st.order.length > st.shown, total: st.order.length };
+    if (st.users && st.users.length) return { users: st.users, pool: st.pool, more: false, total: st.users.length };
+    return null;
+  }
+  // Adds the next batch of customers from the same shuffled pool (no new segment call).
+  function loadMoreUsers(cid, aud) {
+    const st = getStoredUsers(cid, aud);
+    if (!st || !st.order) return storedView(st);
+    st.shown = Math.min(st.order.length, st.shown + CFG.sampleSize);
+    sessionStorage.setItem(SS_USERS(cid, aud), JSON.stringify(st));
+    return storedView(st);
   }
 
   /* ---------------- rendering ---------------- */
@@ -613,12 +627,16 @@
   .ps-frame iframe{border:0;transform-origin:0 0;pointer-events:none;background:#fff;display:block}
   .ps-frame img{width:100%;display:block}
   .ps-load{padding:40px 12px;text-align:center;color:#6b7280;font-size:13px}
+  .ps-more{display:flex;justify-content:center;margin:28px 0 8px}
   .ps-empty{border:1px dashed #d1d5db;border-radius:8px;padding:48px;text-align:center;color:#4b5563}
   #ps-zoom{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2147483001;display:flex;justify-content:center;align-items:center;padding:24px;box-sizing:border-box}
-  /* Proof popup: 740px wide incl. 20px padding = 700px for the email. The email keeps the width it was
-     built at; the popup scrolls sideways only if that width is more than 700px. */
-  .ps-modal{width:min(740px,100%);max-height:100%;display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.35);box-sizing:border-box;overflow:hidden;font-family:Figtree,system-ui,-apple-system,sans-serif;color:#2c3546}
-  .ps-mh{padding:20px 20px 14px;border-bottom:1px solid #e1e5ea;background:#fff}
+  /* Proof popup: 800px wide, 20px body padding and 10px inside the bordered box = 740px for the email.
+     Fixed height so moving between proofs never resizes it; only the email area scrolls. */
+  .ps-modal{width:min(800px,100%);height:100%;max-height:100%;display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.35);box-sizing:border-box;overflow:hidden;font-family:Figtree,system-ui,-apple-system,sans-serif;color:#2c3546}
+  .ps-mh{position:relative;z-index:3;flex:none;padding:20px 20px 14px;border-bottom:1px solid #e1e5ea;background:#fff}
+  /* Subject + slider: outside the scrolling area. Subject wraps after 60% of the row; slider stays right. */
+  .ps-msubbar{position:relative;z-index:2;flex:none;display:flex;align-items:flex-start;gap:16px;padding:14px 20px;border-bottom:1px solid #e1e5ea;background:#fff}
+  .ps-msubbar .ps-mnav{margin-left:auto}
   .ps-mtitle{display:flex;justify-content:space-between;align-items:center;gap:12px}
   .ps-mtitle h3{margin:0;min-width:0;font-size:20px;font-weight:600;line-height:1.3;color:#2c3546;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ps-mtitle .who{color:#0a2ecc;text-decoration:none}
@@ -627,7 +645,7 @@
   .ps-mnav button:hover:not(:disabled){background:#eef1fd}
   .ps-mnav button:disabled{color:#c9d0d9;cursor:default}
   .ps-mnav .pos{min-width:52px;text-align:center}
-  .ps-mclose{margin-left:8px;border:0;background:none;padding:0 2px;font-size:26px;line-height:1;color:#656f85;cursor:pointer}
+  .ps-mclose{flex:none;margin-left:8px;border:0;background:none;padding:0 2px;font-size:26px;line-height:1;color:#656f85;cursor:pointer}
   .ps-mclose:hover{color:#2c3546}
   .ps-mtools{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;margin-top:12px;flex-wrap:wrap}
   .ps-mchips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:#656f85}
@@ -643,12 +661,18 @@
   .ps-igrp .ps-ibtn:last-child{border-radius:0 4px 4px 0;border-left:0}
   .ps-mb{flex:1;min-height:0;overflow:auto;padding:20px;background:#fff}
   .ps-mslide{will-change:transform,opacity}
-  /* Subject and preheader sit above the bordered email box, not inside it. */
-  .ps-msubj{margin:0 0 12px}
+  .ps-msubj{flex:0 1 auto;max-width:60%;min-width:0;will-change:transform,opacity}
   .ps-msub{font-size:14px;line-height:1.4;word-break:break-word}
   .ps-mpre{margin-top:2px;font-size:12px;color:#656f85;word-break:break-word}
-  /* Inner border drawn as an outline so it never adds width (no sideways scroll for a 700px email). */
-  .ps-mframe{min-width:100%;width:max-content;box-sizing:border-box;outline:1px solid #e1e5ea;border-radius:6px;overflow:hidden}
+  /* Inner border drawn as an outline so it never adds width; 10px breathing space around the email. */
+  .ps-mframe{min-width:100%;width:max-content;box-sizing:border-box;padding:10px;outline:1px solid #e1e5ea;border-radius:6px;overflow:hidden}
+  /* Tooltips for the popup's icon controls (shown below the control). */
+  .ps-tip{position:relative}
+  .ps-tip::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;z-index:5;padding:5px 8px;border-radius:4px;background:#2c3546;color:#fff;font:400 12px/1.3 Figtree,system-ui,-apple-system,sans-serif;white-space:nowrap;opacity:0;pointer-events:none;transform:translate(-50%,-2px);transition:opacity .12s ease,transform .12s ease}
+  .ps-tip:hover::after{opacity:1;transform:translate(-50%,0)}
+  .ps-tip.tip-r::after{left:auto;right:0;transform:translateY(-2px)}
+  .ps-tip.tip-r:hover::after{transform:translateY(0)}
+  .ps-tipwrap{display:inline-flex}
   .ps-mb iframe{display:block;margin:0 auto;border:0;background:#fff}
   @media (max-width:768px){
     #ps-drawer{width:100vw;padding:16px}
@@ -830,7 +854,7 @@
     btn.id = `ps-btn-${CHANNEL}`;
     btn.className = IS_PROD ? 'ps-btn' : 'ps-btn is-pre';
     btn.type = 'button';
-    btn.title = "Preview this email for 10 customers in this campaign's audience" + (IS_PROD ? '' : ' (pre-prod build)');
+    btn.title = `Preview this email for ${CFG.sampleSize} customers in this campaign's audience` + (IS_PROD ? '' : ' (pre-prod build)');
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg><span>ProofSet</span>' + (IS_PROD ? '' : '<span class="ps-pre">PRE</span>');
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openDrawer(); });
     wrap.appendChild(btn);
@@ -923,15 +947,15 @@
       state.aud = getCampaignAudience(ci.id);
       paintAudience();
       showAudEdit(false);
-      const stored = getStoredUsers(ci.id, state.aud);
-      if (stored && stored.users && stored.users.length) await renderProofs(stored.users, stored.pool);
+      const v = storedView(getStoredUsers(ci.id, state.aud));
+      if (v) await renderProofs(v);
       else await pickAndRender();
     });
     $('ps-aud-cancel').onclick = () => { $('ps-aud-link').value = ''; showAudEdit(false); };
 
     /* Loading state with rotating messages, so the user always knows work is happening. */
     const FUN = [
-      'Rounding up 10 lucky subscribers…',
+      `Rounding up ${CFG.sampleSize} lucky subscribers…`,
       'Asking IO very politely to render each proof…',
       'Resolving Liquid, one drop at a time…',
       'Checking which bouquet each person gets…',
@@ -963,7 +987,7 @@
     async function pickAndRender() {
       showLoading(`Gathering ${CFG.sampleSize} customers from "${state.aud.name}"…`);
       const picked = await pickRandomUsers(ci.id, state.aud);
-      await renderProofs(picked.users, picked.pool);
+      await renderProofs(picked);
     }
 
     async function run(task) {
@@ -997,7 +1021,10 @@
       await pickAndRender();
     });
 
-    async function renderProofs(users, poolSize) {
+    async function renderProofs(view, opts = {}) {
+      const users = view.users;
+      const drawer = $('ps-drawer');
+      const keepTop = opts.keepScroll ? drawer.scrollTop : null;
       let tpl;
       try { tpl = currentTemplate(); } catch (e) { $('ps-body').innerHTML = `<div class="ps-empty">${esc(e.message)}</div>`; return; }
 
@@ -1012,6 +1039,7 @@
       grid.className = 'ps-grid';
       $('ps-body').innerHTML = '';
       $('ps-body').appendChild(grid);
+      if (keepTop !== null) drawer.scrollTop = keepTop;
 
       const cards = users.map((u) => {
         const c = document.createElement('div');
@@ -1099,6 +1127,22 @@
       $('ps-meta').innerHTML = `<div class="l1">Here's a sample of what your customers in <span class="aud">${esc(state.aud.name)}</span> will receive.</div>`
         + `<div class="l2">Estimated Template Size: <b>${kb(avg)} KB</b>${esc(versionNote)}`
         + (failed ? ` · ${failed} proof(s) failed.` : '') + '</div>';
+
+      // "Load more proofs": the next batch from the same shuffled pool. Proofs already on screen come
+      // from the render cache, so only the new customers are rendered through IO.
+      if (view.more) {
+        const more = document.createElement('div');
+        more.className = 'ps-more';
+        more.innerHTML = `<button type="button" class="ps-b sec">Load more proofs</button>`;
+        const mb = more.querySelector('button');
+        mb.onclick = () => {
+          mb.disabled = true;
+          mb.innerHTML = `<span class="ps-spin sm"></span>Loading ${CFG.sampleSize} more proofs…`;
+          run(() => renderProofs(loadMoreUsers(ci.id, state.aud), { keepScroll: true }));
+        };
+        $('ps-body').appendChild(more);
+      }
+      if (keepTop !== null) drawer.scrollTop = keepTop;
     }
 
     function fillCard(card, r) {
@@ -1144,7 +1188,9 @@
     // Proof popup with a slider through every rendered proof, in the grid's current order.
     function openProofs(startCard) {
       const grid = startCard.parentElement;
-      const list = [...grid.children].filter((c) => c._psResult && !c._psResult.error && c._psResult.html);
+      // Only the proofs that are on screen in the grid right now, in the grid's current order.
+      const list = [...grid.children].filter((c) => c.isConnected && c.offsetParent !== null
+        && c._psResult && !c._psResult.error && c._psResult.html);
       let idx = Math.max(0, list.indexOf(startCard));
       const MOBILE_W = 375;
       let mode = 'desktop';
@@ -1156,28 +1202,32 @@
           <div class="ps-mh">
             <div class="ps-mtitle">
               <h3>Proof for <a class="who" target="_blank" rel="noopener" title="Open customer profile in IO"></a></h3>
-              <div class="ps-mnav">
-                <button type="button" data-nav="-1" title="Previous proof (Left arrow)" aria-label="Previous proof">${ioIcon('line-chevron-left', 18)}</button>
-                <span class="pos" aria-live="polite"></span>
-                <button type="button" data-nav="1" title="Next proof (Right arrow)" aria-label="Next proof">${ioIcon('line-chevron-right', 18)}</button>
-                <button class="ps-mclose" title="Close (Esc)" aria-label="Close">&times;</button>
-              </div>
+              <button class="ps-mclose ps-tip tip-r" data-tip="Close (Esc)" aria-label="Close">&times;</button>
             </div>
             <div class="ps-mtools">
               <div class="ps-mchips"></div>
               <div class="ps-mright">
                 <span class="ps-igrp" role="group" aria-label="Preview width">
-                  <button type="button" class="ps-ibtn on" data-w="desktop" title="Desktop" aria-label="Desktop">${ioIcon('line-desktop')}</button><button type="button" class="ps-ibtn" data-w="mobile" title="Mobile (375px)" aria-label="Mobile">${ioIcon('line-architect-app-push')}</button>
+                  <button type="button" class="ps-ibtn ps-tip on" data-w="desktop" data-tip="Desktop view" aria-label="Desktop view">${ioIcon('line-desktop')}</button><button type="button" class="ps-ibtn ps-tip" data-w="mobile" data-tip="Mobile view (375px)" aria-label="Mobile view">${ioIcon('line-architect-app-push')}</button>
                 </span>
-                <button type="button" class="ps-ibtn" disabled title="Send test message (coming soon)" aria-label="Send test message, coming soon">${ioIcon('line-architect-test-journey')}</button>
-                <a class="ps-ibtn ps-mopen" target="_blank" rel="noopener" title="Open in new tab" aria-label="Open in new tab">${ioIcon('line-export')}</a>
+                <span class="ps-tipwrap ps-tip tip-r" data-tip="Send test message (coming soon)"><button type="button" class="ps-ibtn" disabled aria-label="Send test message, coming soon">${ioIcon('line-architect-test-journey')}</button></span>
+                <a class="ps-ibtn ps-mopen ps-tip tip-r" target="_blank" rel="noopener" data-tip="Open in new tab" aria-label="Open in new tab">${ioIcon('line-export')}</a>
               </div>
+            </div>
+          </div>
+          <div class="ps-msubbar">
+            <div class="ps-msubj"></div>
+            <div class="ps-mnav">
+              <button type="button" class="ps-tip" data-nav="-1" data-tip="Previous proof (Left arrow)" aria-label="Previous proof">${ioIcon('line-chevron-left', 18)}</button>
+              <span class="pos" aria-live="polite"></span>
+              <button type="button" class="ps-tip tip-r" data-nav="1" data-tip="Next proof (Right arrow)" aria-label="Next proof">${ioIcon('line-chevron-right', 18)}</button>
             </div>
           </div>
           <div class="ps-mb"><div class="ps-mslide"></div></div>
         </div>`;
       const q = (sel) => z.querySelector(sel);
       const slide = q('.ps-mslide');
+      const subj = q('.ps-msubj');
       let ifr = null;
       let natural = { w: 600, h: 400 };
       let builtW = 600;
@@ -1200,8 +1250,8 @@
         q('[data-nav="1"]').disabled = idx === list.length - 1;
         q('.ps-mchips').innerHTML = `<span class="kb">${kb(r.bytes || 0)} KB</span>${card.querySelector('.ps-ver').innerHTML}${card.querySelector('.ps-flags').innerHTML}`;
         q('.ps-mopen').href = proofBlobUrl(r.html);
-        slide.innerHTML = `<div class="ps-msubj"><div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>${r.preHeader ? `<div class="ps-mpre">${esc(r.preHeader)}</div>` : ''}</div>
-          <div class="ps-mframe"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe></div>`;
+        subj.innerHTML = `<div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>${r.preHeader ? `<div class="ps-mpre">${esc(r.preHeader)}</div>` : ''}`;
+        slide.innerHTML = `<div class="ps-mframe"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe></div>`;
         ifr = slide.querySelector('iframe');
         builtW = builtWidth(r.html);
         natural = { w: builtW, h: 400 };
@@ -1223,14 +1273,12 @@
         const next = idx + dir;
         if (busy || next < 0 || next >= list.length) return;
         busy = true;
-        if (!reduceMotion && slide.animate) {
-          await slide.animate([{ transform: 'translateX(0)', opacity: 1 }, { transform: `translateX(${-24 * dir}px)`, opacity: 0 }], { duration: 160, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).finished.catch(() => {});
-        }
+        const anim = !reduceMotion && slide.animate;
+        const both = (frames, o) => Promise.all([slide, subj].map((el) => el.animate(frames, o).finished.catch(() => {})));
+        if (anim) await both([{ transform: 'translateX(0)', opacity: 1 }, { transform: `translateX(${-24 * dir}px)`, opacity: 0 }], { duration: 160, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
         idx = next;
         fill();
-        if (!reduceMotion && slide.animate) {
-          await slide.animate([{ transform: `translateX(${24 * dir}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' }).finished.catch(() => {});
-        }
+        if (anim) await both([{ transform: `translateX(${24 * dir}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
         busy = false;
       };
 
@@ -1268,9 +1316,9 @@
         showAudEdit(true);
         return;
       }
-      const stored = getStoredUsers(ci.id, state.aud);
-      if (stored && stored.users && stored.users.length) {
-        run(() => renderProofs(stored.users, stored.pool)); // same customers as earlier in this session
+      const v = storedView(getStoredUsers(ci.id, state.aud));
+      if (v) {
+        run(() => renderProofs(v)); // same customers as earlier in this session
       } else {
         run(pickAndRender); // audience known: gather customers straight away, no extra click
       }

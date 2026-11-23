@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Proofs load 8 at a time. A "Load more proofs" button under the grid adds the next 8 from the same shuffled sample (no new segment call; proofs already shown come from cache, so only the new customers are rendered). It disappears once every loaded customer is shown. Refresh Proofs starts over with a fresh 8.
+- Proof popup slider only goes through the proofs that are on screen in the grid, in the grid's order.
+- Proof popup has a fixed height, so it no longer jumps in size while moving between proofs.
+- Subject line, preheader and the slider sit in their own bar above the email and stay put while the email scrolls. The slider is on the right; a long subject wraps after 60% of the row.
+- Popup is 800px wide with 10px of space between the bordered box and the email (740px for the email).
+- Tooltips on every icon in the popup: Desktop view, Mobile view, Send test message (coming soon), Open in new tab, Previous / Next proof, Close.
+
 ## 1.1.0
 
 - Slider in the proof popup: previous / next buttons with a "3 / 10" position, and the Left / Right arrow keys, through every rendered proof in the grid's current order (sorting included). Proofs change with a short, calm slide (out 160 ms, in 260 ms; none if the system asks for reduced motion). Desktop / Mobile stays as chosen while sliding.
