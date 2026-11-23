@@ -6,7 +6,7 @@ Bluecore shows proofs of a campaign for several customers from its audience on t
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0** (1.0.9 in pre-prod validation).
+Current stable version: **1.0.0** (1.1.0 in pre-prod validation).
 
 ## Install
 
@@ -56,12 +56,12 @@ If the repository is private, the raw link only works for people with access; in
 
 ### What each card shows
 
-- Masked email (e.g. `j***@gmail.com`) and the rendered size in KB
+- Masked email (e.g. `j***@gmail.com`, linked to the customer's IO profile) and the rendered size in KB
 - Subject line as resolved for that customer
 - **Design** tag: *Unique* when no other customer in the sample sees this exact email, or *Shared by N* when N customers see the same email (same visible text, images and link destinations). Per-customer tracking, such as link query params (`srccode`, `promotion`) and tracking pixels, is ignored. The summary line shows how many distinct designs the sample produced, and warns when every customer sees the same design.
 - **Sort by design** control above the proofs: *Unique first* or *Similar together*, with the active one highlighted.
 - Flags: Gmail clipping (over 102 KB), close to the clip limit, unrendered Liquid left in the output, render errors
-- The rendered email, scaled to the card width. Click a card to open its proof popup: customer, size and design tag in the header with Desktop / Mobile and "Open in new tab" icons; the subject and preheader sit just above the email. The email shows at its built width (scrolls sideways only if wider than 700px); close with X, Esc or clicking outside.
+- The rendered email, scaled to the card width. Click a card to open its proof popup: customer (linked to their IO profile), size and design tag in the header, Desktop / Mobile and "Open in new tab" icons, and a slider (buttons or Left / Right keys) through all proofs; the subject and preheader sit just above the email. The email shows at its built width (scrolls sideways only if wider than 700px); close with X, Esc or clicking outside.
 - **View in browser** inside the full-size view opens that customer's proof in a new tab. IO's real view-in-browser page (`<%ins_view_in_browser%>`) only exists after an email is sent, so previews cannot link to it.
 
 The header shows the average size as "Estimated Template Size", like Bluecore.

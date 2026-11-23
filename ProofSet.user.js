@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.0.9
+// @version      1.1.0
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -48,7 +48,7 @@
   const CHANNEL = 'prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.0.9';
+  const VERSION = '1.1.0';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -503,6 +503,13 @@
     const t = setInterval(() => { check(); if (++n > 20 || !ifr.isConnected) clearInterval(t); }, 300);
   }
 
+  /* ---------------- IO look ---------------- */
+
+  // Icons from the panel's own sprite (same files IO uses), so they match IO exactly.
+  const ioIcon = (id, size = 20) => `<svg width="${size}" height="${size}" class="icon" style="min-width:${size}px;fill:currentColor" aria-hidden="true"><use href="/sprite.svg#${id}"></use></svg>`;
+  // IO's customer profile page; the Profile ID comes with the segment list, so no extra call.
+  const profileUrl = (insiderId) => `/user-profiles/${encodeURIComponent(insiderId || '')}`;
+
   /* ---------------- UI ---------------- */
 
   // Proofly logo shown under the ProofSet wordmark (official logo, tagline removed,
@@ -581,7 +588,8 @@
   .ps-card .ps-ver .ps-flag{display:inline-block;line-height:1.4;border:1px solid #fff;box-shadow:0 0 0 1px #c9d3f9}
   .ps-card .ps-frame{border-radius:0 0 6px 6px}
   .ps-ch{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px}
-  .ps-ch .em{color:#0a2ecc;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-ch .em{color:#0a2ecc;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none}
+  .ps-ch .em:hover,.ps-mtitle .who:hover{text-decoration:underline}
   .ps-chr{display:flex;align-items:center;gap:8px;flex:none}
   .ps-card{border-color:#e1e5ea!important;transition:0.5s}
   .ps-card:hover{box-shadow:5px 10px 20px 0px #00000033;transform:translateY(-10px);cursor:pointer !important}
@@ -608,26 +616,37 @@
   /* Proof popup: 740px wide incl. 20px padding = 700px for the email. The email keeps the width it was
      built at; the popup scrolls sideways only if that width is more than 700px. */
   .ps-modal{width:min(740px,100%);max-height:100%;display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.35);box-sizing:border-box;overflow:hidden;font-family:Figtree,system-ui,-apple-system,sans-serif;color:#2c3546}
-  .ps-mh{padding:20px 20px 14px;border-bottom:1px solid #e1e5ea}
-  .ps-mtitle{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-  .ps-mtitle h3{margin:0;font-size:20px;font-weight:600;line-height:1.3;color:#2c3546}
-  .ps-mtitle h3 .who{color:#0a2ecc}
-  .ps-mclose{border:0;background:none;padding:0 2px;font-size:26px;line-height:1;color:#656f85;cursor:pointer}
+  .ps-mh{padding:20px 20px 14px;border-bottom:1px solid #e1e5ea;background:#fff}
+  .ps-mtitle{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .ps-mtitle h3{margin:0;min-width:0;font-size:20px;font-weight:600;line-height:1.3;color:#2c3546;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-mtitle .who{color:#0a2ecc;text-decoration:none}
+  .ps-mnav{display:flex;align-items:center;gap:4px;flex:none;font-size:13px;color:#656f85;white-space:nowrap}
+  .ps-mnav button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid #e1e5ea;border-radius:4px;background:#fff;color:#0a2ecc;cursor:pointer}
+  .ps-mnav button:hover:not(:disabled){background:#eef1fd}
+  .ps-mnav button:disabled{color:#c9d0d9;cursor:default}
+  .ps-mnav .pos{min-width:52px;text-align:center}
+  .ps-mclose{margin-left:8px;border:0;background:none;padding:0 2px;font-size:26px;line-height:1;color:#656f85;cursor:pointer}
   .ps-mclose:hover{color:#2c3546}
-  .ps-msub{font-size:14px;line-height:1.4;word-break:break-word}
-  .ps-mpre{margin-top:2px;font-size:12px;color:#656f85;word-break:break-word}
   .ps-mtools{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;margin-top:12px;flex-wrap:wrap}
   .ps-mchips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:#656f85}
   .ps-mchips .kb{font-weight:600;color:#2c3546}
-  .ps-mright{display:flex;align-items:center;gap:14px}
-  .ps-mopen{display:inline-flex;align-items:center;justify-content:center;width:32px;height:28px;box-sizing:border-box;border:1px solid #b7c3f7;border-radius:4px;color:#0a2ecc;background:#fff;text-decoration:none}
-  .ps-mopen:hover{background:#eef1fd}
-  .ps-icons button{display:inline-flex;align-items:center;justify-content:center;width:34px;padding:0}
-  .ps-icons svg{display:block}
+  .ps-mright{display:flex;align-items:center;gap:8px}
+  .ps-ibtn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:30px;box-sizing:border-box;padding:0;border:1px solid #b7c3f7;border-radius:4px;background:#fff;color:#0a2ecc;cursor:pointer;text-decoration:none}
+  .ps-ibtn:hover:not(:disabled){background:#eef1fd}
+  .ps-ibtn.on{background:#0a2ecc;border-color:#0a2ecc;color:#fff}
+  .ps-ibtn:disabled{color:#c9d0d9;border-color:#e1e5ea;cursor:not-allowed}
+  .ps-igrp{display:inline-flex}
+  .ps-igrp .ps-ibtn{border-radius:0}
+  .ps-igrp .ps-ibtn:first-child{border-radius:4px 0 0 4px}
+  .ps-igrp .ps-ibtn:last-child{border-radius:0 4px 4px 0;border-left:0}
   .ps-mb{flex:1;min-height:0;overflow:auto;padding:20px;background:#fff}
+  .ps-mslide{will-change:transform,opacity}
+  /* Subject and preheader sit above the bordered email box, not inside it. */
+  .ps-msubj{margin:0 0 12px}
+  .ps-msub{font-size:14px;line-height:1.4;word-break:break-word}
+  .ps-mpre{margin-top:2px;font-size:12px;color:#656f85;word-break:break-word}
   /* Inner border drawn as an outline so it never adds width (no sideways scroll for a 700px email). */
-  .ps-mframe{min-width:100%;width:max-content;box-sizing:border-box;outline:1px solid #e1e5ea;border-radius:6px;overflow:hidden;background:#fff}
-  .ps-minbox{width:0;min-width:100%;box-sizing:border-box;padding:12px 16px;border-bottom:1px solid #e1e5ea;background:#fff}
+  .ps-mframe{min-width:100%;width:max-content;box-sizing:border-box;outline:1px solid #e1e5ea;border-radius:6px;overflow:hidden}
   .ps-mb iframe{display:block;margin:0 auto;border:0;background:#fff}
   @media (max-width:768px){
     #ps-drawer{width:100vw;padding:16px}
@@ -995,7 +1014,7 @@
       const cards = users.map((u) => {
         const c = document.createElement('div');
         c.className = 'ps-card';
-        c.innerHTML = `<div class="ps-ch"><span class="em">${esc(u.label)}</span><span class="sz">…</span></div><span class="ps-ver"></span>
+        c.innerHTML = `<div class="ps-ch"><a class="em" href="${profileUrl(u.insiderId)}" target="_blank" rel="noopener" title="Open customer profile in IO">${esc(u.label)}</a><span class="sz">…</span></div><span class="ps-ver"></span>
           <div class="ps-flags"></div>
           <div class="ps-sub"><b>Subject:</b> <span class="sj">…</span></div>
           <div class="ps-frame"><div class="ps-load">Rendering…</div></div>`;
@@ -1111,7 +1130,8 @@
       try { new ResizeObserver(layout).observe(frame); } catch (e) { /* ignore */ }
       ifr.srcdoc = neutralizeTrackers(r.html);
       layout();
-      card.onclick = () => zoom(r, card);
+      card._psResult = r;
+      card.onclick = (e) => { if (e.target.closest('a')) return; openProofs(card); };
     }
 
     function paintFlags(card, flags) {
@@ -1119,66 +1139,122 @@
       box.innerHTML = flags.map((f) => `<span class="ps-flag ${f.level}">${esc(f.text)}</span>`).join('');
     }
 
-    // Full-size proof popup for one customer: who, subject, preheader, size, design tag, warnings,
-    // desktop / mobile width, and "Open in new tab" (this customer's proof, trackers removed).
-    function zoom(r, card) {
+    // Proof popup with a slider through every rendered proof, in the grid's current order.
+    function openProofs(startCard) {
+      const grid = startCard.parentElement;
+      const list = [...grid.children].filter((c) => c._psResult && !c._psResult.error && c._psResult.html);
+      let idx = Math.max(0, list.indexOf(startCard));
+      const MOBILE_W = 375;
+      let mode = 'desktop';
+      const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
       const z = document.createElement('div');
       z.id = 'ps-zoom';
-      const verHtml = card ? card.querySelector('.ps-ver').innerHTML : '';
-      const flagsHtml = card ? card.querySelector('.ps-flags').innerHTML : '';
-      z.innerHTML = `<div class="ps-modal" role="dialog" aria-modal="true" aria-label="Proof for ${esc(r.user.label)}">
+      z.innerHTML = `<div class="ps-modal" role="dialog" aria-modal="true">
           <div class="ps-mh">
-            <div class="ps-mtitle"><h3>Proof for <span class="who">${esc(r.user.label)}</span></h3><button class="ps-mclose" title="Close (Esc)">&times;</button></div>
+            <div class="ps-mtitle">
+              <h3>Proof for <a class="who" target="_blank" rel="noopener" title="Open customer profile in IO"></a></h3>
+              <div class="ps-mnav">
+                <button type="button" data-nav="-1" title="Previous proof (Left arrow)" aria-label="Previous proof">${ioIcon('line-chevron-left', 18)}</button>
+                <span class="pos" aria-live="polite"></span>
+                <button type="button" data-nav="1" title="Next proof (Right arrow)" aria-label="Next proof">${ioIcon('line-chevron-right', 18)}</button>
+                <button class="ps-mclose" title="Close (Esc)" aria-label="Close">&times;</button>
+              </div>
+            </div>
             <div class="ps-mtools">
-              <div class="ps-mchips"><span class="kb">${kb(r.bytes || 0)} KB</span>${verHtml}${flagsHtml}</div>
+              <div class="ps-mchips"></div>
               <div class="ps-mright">
-                <span class="ps-seg ps-icons" role="group" aria-label="Preview width"><button type="button" data-w="desktop" class="on" title="Desktop" aria-label="Desktop"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='2' y='4' width='20' height='13' rx='2'/><path d='M8 21h8M12 17v4'/></svg></button><button type="button" data-w="mobile" title="Mobile (375px)" aria-label="Mobile"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='7' y='2' width='10' height='20' rx='2'/><path d='M11 18h2'/></svg></button></span>
-                <a class="ps-mopen" target="_blank" rel="noopener" href="${proofBlobUrl(r.html)}" title="Open in new tab" aria-label="Open in new tab"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M14 4h6v6'/><path d='M20 4l-9 9'/><path d='M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/></svg></a>
+                <span class="ps-igrp" role="group" aria-label="Preview width">
+                  <button type="button" class="ps-ibtn on" data-w="desktop" title="Desktop" aria-label="Desktop">${ioIcon('line-desktop')}</button><button type="button" class="ps-ibtn" data-w="mobile" title="Mobile (375px)" aria-label="Mobile">${ioIcon('line-architect-app-push')}</button>
+                </span>
+                <button type="button" class="ps-ibtn" disabled title="Send test message (coming soon)" aria-label="Send test message, coming soon">${ioIcon('line-architect-test-journey')}</button>
+                <a class="ps-ibtn ps-mopen" target="_blank" rel="noopener" title="Open in new tab" aria-label="Open in new tab">${ioIcon('line-export')}</a>
               </div>
             </div>
           </div>
-          <div class="ps-mb"><div class="ps-mframe">
-            <div class="ps-minbox"><div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>${r.preHeader ? `<div class="ps-mpre">${esc(r.preHeader)}</div>` : ''}</div>
-            <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe>
-          </div></div>
+          <div class="ps-mb"><div class="ps-mslide"></div></div>
         </div>`;
-      const ifr = z.querySelector('iframe');
-      const close = () => { z.remove(); document.removeEventListener('keydown', onKey); };
-      const onKey = (e) => { if (e.key === 'Escape') close(); };
-      document.addEventListener('keydown', onKey);
-      z.querySelector('.ps-mclose').onclick = close;
-      z.addEventListener('click', (e) => { if (e.target === z) close(); });
-
-      // Desktop: the width the template is built at (its widest declared table width, e.g. 700), never
-      // a measurement taken while the email is squeezed. The 700px body scrolls sideways only when the
-      // email is wider. Mobile: 375px, so the email's own mobile styles apply.
-      const MOBILE_W = 375;
-      const BUILT_W = builtWidth(r.html);
-      let mode = 'desktop';
-      let natural = { w: BUILT_W, h: 400 };
+      const q = (sel) => z.querySelector(sel);
+      const slide = q('.ps-mslide');
+      let ifr = null;
+      let natural = { w: 600, h: 400 };
+      let builtW = 600;
       const layout = () => {
+        if (!ifr) return;
         ifr.style.width = (mode === 'mobile' ? MOBILE_W : natural.w) + 'px';
         ifr.style.height = natural.h + 'px';
       };
-      const segBtns = [...z.querySelectorAll('.ps-seg button')];
-      segBtns.forEach((b) => {
+
+      // Fills the header and the email box for proof idx.
+      const fill = () => {
+        const card = list[idx];
+        const r = card._psResult;
+        const who = q('.who');
+        who.textContent = r.user.label;
+        who.href = profileUrl(r.user.insiderId);
+        q('.ps-modal').setAttribute('aria-label', `Proof for ${r.user.label}`);
+        q('.pos').textContent = `${idx + 1} / ${list.length}`;
+        q('[data-nav="-1"]').disabled = idx === 0;
+        q('[data-nav="1"]').disabled = idx === list.length - 1;
+        q('.ps-mchips').innerHTML = `<span class="kb">${kb(r.bytes || 0)} KB</span>${card.querySelector('.ps-ver').innerHTML}${card.querySelector('.ps-flags').innerHTML}`;
+        q('.ps-mopen').href = proofBlobUrl(r.html);
+        slide.innerHTML = `<div class="ps-msubj"><div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>${r.preHeader ? `<div class="ps-mpre">${esc(r.preHeader)}</div>` : ''}</div>
+          <div class="ps-mframe"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe></div>`;
+        ifr = slide.querySelector('iframe');
+        builtW = builtWidth(r.html);
+        natural = { w: builtW, h: 400 };
+        layout();
+        const mine = ifr;
+        watchSize(ifr, (sz) => {
+          if (mine !== ifr) return; // an older slide's iframe
+          if (mode === 'desktop' && sz.w > natural.w) natural.w = Math.min(sz.w, 1400);
+          natural.h = sz.h;
+          layout();
+        });
+        ifr.srcdoc = prepareForDisplay(r.html).html;
+        q('.ps-mb').scrollTop = 0;
+      };
+
+      // Calm slide: the current proof eases out a little to one side, the next eases in from the other.
+      let busy = false;
+      const go = async (dir) => {
+        const next = idx + dir;
+        if (busy || next < 0 || next >= list.length) return;
+        busy = true;
+        if (!reduceMotion && slide.animate) {
+          await slide.animate([{ transform: 'translateX(0)', opacity: 1 }, { transform: `translateX(${-24 * dir}px)`, opacity: 0 }], { duration: 160, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).finished.catch(() => {});
+        }
+        idx = next;
+        fill();
+        if (!reduceMotion && slide.animate) {
+          await slide.animate([{ transform: `translateX(${24 * dir}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' }).finished.catch(() => {});
+        }
+        busy = false;
+      };
+
+      const close = () => { z.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => {
+        if (e.key === 'Escape') close();
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+      };
+      document.addEventListener('keydown', onKey);
+      q('.ps-mclose').onclick = close;
+      z.addEventListener('click', (e) => { if (e.target === z) close(); });
+      z.querySelectorAll('[data-nav]').forEach((b) => { b.onclick = () => go(Number(b.dataset.nav)); });
+      const wBtns = [...z.querySelectorAll('[data-w]')];
+      wBtns.forEach((b) => {
         b.onclick = () => {
           mode = b.dataset.w;
-          if (mode === 'desktop') natural.w = BUILT_W;
-          segBtns.forEach((x) => x.classList.toggle('on', x === b));
+          if (mode === 'desktop') natural.w = builtW;
+          wBtns.forEach((x) => x.classList.toggle('on', x === b));
           layout();
         };
       });
-      layout();
+
       document.body.appendChild(z);
-      watchSize(ifr, (sz) => {
-        // Grow only (content genuinely wider than the built width); never shrink below it.
-        if (mode === 'desktop' && sz.w > natural.w) natural.w = Math.min(sz.w, 1400);
-        natural.h = sz.h;
-        layout();
-      });
-      ifr.srcdoc = prepareForDisplay(r.html).html;
-      z.querySelector('.ps-mclose').focus();
+      fill();
+      q('.ps-mclose').focus();
     }
 
     function showStoredOrEmpty() {

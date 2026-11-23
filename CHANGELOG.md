@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+- Slider in the proof popup: previous / next buttons with a "3 / 10" position, and the Left / Right arrow keys, through every rendered proof in the grid's current order (sorting included). Proofs change with a short, calm slide (out 160 ms, in 260 ms; none if the system asks for reduced motion). Desktop / Mobile stays as chosen while sliding.
+- Icons from IO's own sprite: Desktop (line-desktop), Mobile (line-architect-app-push), Send test message (line-architect-test-journey; disabled, coming soon), Open in new tab (line-export), slider chevrons (line-chevron-left / right). Order: Desktop, Mobile, Send test message, Open in new tab.
+- Customer emails link to their IO profile (/user-profiles/<Profile ID>, new tab) on the cards and in the popup title. The Profile ID already comes with the segment list, so this adds no calls to IO.
+- Subject line and preheader moved out of the bordered email box, just above it.
+- Popup header and body are white; only the email itself brings its own background.
+
 ## 1.0.9
 
 - Fix: the Update badge did not appear after a new release. The last check's result ("latest is 1.0.6") was kept for 6 hours, even after Tampermonkey had already updated the script past it, so the newer 1.0.8 was never looked up. Now a saved result older than the installed version is ignored, results expire after 30 minutes (was 6 hours), and the check also runs when you come back to the IO tab. All checks call GitHub only (1 KB each), never IO.
