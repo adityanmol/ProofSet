@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8
+
+- Proof popup: Desktop / Mobile switch and "Open in new tab" are icon buttons (with tooltips and screen-reader labels).
+- White background behind the email; the email sits in a bordered box (drawn as an outline, so a 700px email still has no sideways scroll).
+- Subject line and preheader moved into the top of that box, right above the email copy, instead of under the customer's email address. Long subjects wrap and never widen the popup.
+
 ## 1.0.7
 
 - Fix: the Desktop switch in the proof popup stayed at mobile width. Responsive templates (e.g. width="700" with max-width:100%) shrink to 375px in Mobile, and switching back re-measured the email before it had grown again. Desktop now uses the width the template is built at (its widest declared table width, 700px for the Teleflora template; 600px if none), growing only if the content is genuinely wider.

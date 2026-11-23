@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.0.7
+// @version      1.0.8
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.0.7';
+  const VERSION = '1.0.8';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -616,15 +616,20 @@
   .ps-mtitle h3 .who{color:#0a2ecc}
   .ps-mclose{border:0;background:none;padding:0 2px;font-size:26px;line-height:1;color:#656f85;cursor:pointer}
   .ps-mclose:hover{color:#2c3546}
-  .ps-msub{margin-top:10px;font-size:14px;line-height:1.4;word-break:break-word}
+  .ps-msub{font-size:14px;line-height:1.4;word-break:break-word}
   .ps-mpre{margin-top:2px;font-size:12px;color:#656f85;word-break:break-word}
   .ps-mtools{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;margin-top:12px;flex-wrap:wrap}
   .ps-mchips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:#656f85}
   .ps-mchips .kb{font-weight:600;color:#2c3546}
   .ps-mright{display:flex;align-items:center;gap:14px}
-  .ps-mopen{display:inline-flex;align-items:center;gap:5px;color:#0a2ecc;font-size:13px;text-decoration:none;white-space:nowrap}
-  .ps-mopen:hover{text-decoration:underline}
-  .ps-mb{flex:1;min-height:0;overflow:auto;padding:20px;background:#f7f8fa}
+  .ps-mopen{display:inline-flex;align-items:center;justify-content:center;width:32px;height:28px;box-sizing:border-box;border:1px solid #b7c3f7;border-radius:4px;color:#0a2ecc;background:#fff;text-decoration:none}
+  .ps-mopen:hover{background:#eef1fd}
+  .ps-icons button{display:inline-flex;align-items:center;justify-content:center;width:34px;padding:0}
+  .ps-icons svg{display:block}
+  .ps-mb{flex:1;min-height:0;overflow:auto;padding:20px;background:#fff}
+  /* Inner border drawn as an outline so it never adds width (no sideways scroll for a 700px email). */
+  .ps-mframe{min-width:100%;width:max-content;box-sizing:border-box;outline:1px solid #e1e5ea;border-radius:6px;overflow:hidden;background:#fff}
+  .ps-minbox{width:0;min-width:100%;box-sizing:border-box;padding:12px 16px;border-bottom:1px solid #e1e5ea;background:#fff}
   .ps-mb iframe{display:block;margin:0 auto;border:0;background:#fff}
   @media (max-width:768px){
     #ps-drawer{width:100vw;padding:16px}
@@ -1109,17 +1114,18 @@
       z.innerHTML = `<div class="ps-modal" role="dialog" aria-modal="true" aria-label="Proof for ${esc(r.user.label)}">
           <div class="ps-mh">
             <div class="ps-mtitle"><h3>Proof for <span class="who">${esc(r.user.label)}</span></h3><button class="ps-mclose" title="Close (Esc)">&times;</button></div>
-            <div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>
-            ${r.preHeader ? `<div class="ps-mpre">Preheader: ${esc(r.preHeader)}</div>` : ''}
             <div class="ps-mtools">
               <div class="ps-mchips"><span class="kb">${kb(r.bytes || 0)} KB</span>${verHtml}${flagsHtml}</div>
               <div class="ps-mright">
-                <span class="ps-seg" role="group" aria-label="Preview width"><button type="button" data-w="desktop" class="on">Desktop</button><button type="button" data-w="mobile">Mobile</button></span>
-                <a class="ps-mopen" target="_blank" rel="noopener" href="${proofBlobUrl(r.html)}">Open in new tab &#8599;</a>
+                <span class="ps-seg ps-icons" role="group" aria-label="Preview width"><button type="button" data-w="desktop" class="on" title="Desktop" aria-label="Desktop"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='2' y='4' width='20' height='13' rx='2'/><path d='M8 21h8M12 17v4'/></svg></button><button type="button" data-w="mobile" title="Mobile (375px)" aria-label="Mobile"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect x='7' y='2' width='10' height='20' rx='2'/><path d='M11 18h2'/></svg></button></span>
+                <a class="ps-mopen" target="_blank" rel="noopener" href="${proofBlobUrl(r.html)}" title="Open in new tab" aria-label="Open in new tab"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M14 4h6v6'/><path d='M20 4l-9 9'/><path d='M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/></svg></a>
               </div>
             </div>
           </div>
-          <div class="ps-mb"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe></div>
+          <div class="ps-mb"><div class="ps-mframe">
+            <div class="ps-minbox"><div class="ps-msub"><b>Subject:</b> ${esc(r.subject || '(empty)')}</div>${r.preHeader ? `<div class="ps-mpre">${esc(r.preHeader)}</div>` : ''}</div>
+            <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email proof"></iframe>
+          </div></div>
         </div>`;
       const ifr = z.querySelector('iframe');
       const close = () => { z.remove(); document.removeEventListener('keydown', onKey); };
