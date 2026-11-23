@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- Fix: the "Sort by design" control disappeared for some audiences (often a custom audience chosen via Change audience). It was shown only when the sample had more than one distinct design. It now shows whenever 2 or more proofs rendered, for any audience; when every customer sees the same design, the options are disabled and marked "all the same", with the reason on hover.
+
 ## 1.0.4
 
 - Card hover: the card lifts 10px with a soft shadow (0.5s transition); the whole card is clickable with a pointer cursor.

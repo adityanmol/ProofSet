@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.0.4
+// @version      1.0.5
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -529,7 +529,9 @@
   .ps-meta .l2{font-size:12px;color:#6b7280;margin-top:4px}
   .ps-meta .l2 b{color:#111827}
   .ps-sort{display:flex;align-items:center;gap:6px;font-size:12px;color:#656f85;white-space:nowrap}
-  .ps-sort[hidden]{display:none}
+  .ps-sort[hidden],.ps-sort-note[hidden]{display:none}
+  .ps-sort-note{font-style:italic}
+  .ps-seg button:disabled{opacity:.45;cursor:not-allowed;background:#fff}
   .ps-seg{display:inline-flex;border:1px solid #b7c3f7;border-radius:4px;overflow:hidden}
   .ps-seg button{height:26px;padding:0 10px;border:0;background:#fff;color:#0a2ecc;font-family:inherit;font-size:12px;cursor:pointer}
   .ps-seg button + button{border-left:1px solid #b7c3f7}
@@ -672,7 +674,7 @@
         <div class="ps-top">
           <div class="ps-brand">
             <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.4${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <div class="ps-brand-sub"><span class="ps-vtag">v1.0.5${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
@@ -691,6 +693,7 @@
           <div class="ps-meta" id="ps-meta"></div>
           <div class="ps-sort" id="ps-sort" hidden>
             <span>Sort by design:</span>
+            <span class="ps-sort-note" id="ps-sort-note" hidden>all the same</span>
             <span class="ps-seg"><button type="button" data-m="unique">Unique first</button><button type="button" data-m="similar">Similar together</button></span>
           </div>
         </div>
@@ -886,7 +889,16 @@
         };
       });
       paintSeg();
-      sortBox.hidden = !(next > 1);
+      // Shown whenever there are 2+ proofs (any audience: campaign, changed or reset). When every proof
+      // has the same design there is nothing to reorder, so the options are disabled with the reason.
+      const rendered = sigs.filter(Boolean).length;
+      const oneDesign = next <= 1;
+      segBtns.forEach((b) => {
+        b.disabled = oneDesign;
+        b.title = oneDesign ? 'All customers in this sample see the same design, so there is nothing to reorder.' : '';
+      });
+      $('ps-sort-note').hidden = !oneDesign;
+      sortBox.hidden = rendered < 2;
 
       const ok = results.filter((r) => !r.error && r.bytes);
       const avg = ok.length ? ok.reduce((a, r) => a + r.bytes, 0) / ok.length : 0;
