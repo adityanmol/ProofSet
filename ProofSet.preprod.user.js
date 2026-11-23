@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.0.8
+// @version      1.0.9
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.0.8';
+  const VERSION = '1.0.9';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -674,7 +674,7 @@
   // button offers the update; after installing it in Tampermonkey, the badge asks to refresh.
   const UPD_CHECK_KEY = `proofset:update-check:${CHANNEL}`;
   const UPD_PENDING_KEY = `proofset:update-pending:${CHANNEL}`;
-  const UPD_EVERY_MS = 6 * 60 * 60 * 1000;
+  const UPD_EVERY_MS = 30 * 60 * 1000; // GitHub only, 1 KB per check
   const cmpVer = (a, b) => {
     const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
     for (let i = 0; i < 3; i++) { const d = (x.at(i) || 0) - (y.at(i) || 0); if (d) return d > 0 ? 1 : -1; }
@@ -682,7 +682,9 @@
   };
   async function latestVersion(force = false) {
     const cached = readLS(UPD_CHECK_KEY);
-    if (!force && cached && Date.now() - cached.at < UPD_EVERY_MS) return cached.latest;
+    // A saved result older than the installed version is stale (written before the last update): ignore it.
+    const fresh = cached && cached.latest && cmpVer(cached.latest, VERSION) >= 0 && Date.now() - cached.at < UPD_EVERY_MS;
+    if (!force && fresh) return cached.latest;
     try {
       const res = await fetch(UPDATE_URL, { cache: 'no-store', headers: { Range: 'bytes=0-1023' } });
       if (!res.ok) return cached ? cached.latest : null;
@@ -694,7 +696,22 @@
       return cached ? cached.latest : null; // offline or blocked: stay quiet
     }
   }
+  // Re-check when the user comes back to the IO tab (still at most once per UPD_EVERY_MS, GitHub only).
+  let updWatching = false;
+  function watchForUpdates() {
+    if (updWatching) return;
+    updWatching = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      const wrap = document.getElementById(`ps-cta-${CHANNEL}`);
+      if (!wrap || wrap.querySelector('.ps-upd')) return;
+      latestVersion().then((latest) => {
+        if (latest && cmpVer(latest, VERSION) > 0 && wrap.isConnected) showUpdateBadge(wrap, latest);
+      });
+    });
+  }
   function initUpdateNotice(wrap) {
+    watchForUpdates();
     const pending = readLS(UPD_PENDING_KEY);
     if (pending && cmpVer(VERSION, pending.version) >= 0) {
       // The refresh after an update: confirm briefly, then clear.

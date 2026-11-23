@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.9
+
+- Fix: the Update badge did not appear after a new release. The last check's result ("latest is 1.0.6") was kept for 6 hours, even after Tampermonkey had already updated the script past it, so the newer 1.0.8 was never looked up. Now a saved result older than the installed version is ignored, results expire after 30 minutes (was 6 hours), and the check also runs when you come back to the IO tab. All checks call GitHub only (1 KB each), never IO.
+
 ## 1.0.8
 
 - Proof popup: Desktop / Mobile switch and "Open in new tab" are icon buttons (with tooltips and screen-reader labels).
