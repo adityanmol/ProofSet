@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.4
+
+- Reset audience now shows whenever you picked a segment by hand, including for campaigns with no segment ProofSet can use (for example, attribute rules, or a campaign whose Recipients step was never opened). Resetting there removes the chosen segment and shows the test proof for test@useinsider.com with the "couldn't find this campaign's audience" note. When the campaign's own segment is known, Reset goes back to it as before.
+
 ## 1.2.3
 
 - Fix: reopening ProofSet showed every proof loaded earlier in the tab (e.g. 24 after two Load mores). It now always opens with the first 8 (same customers, from cache) and Load more adds the next 8 on click.

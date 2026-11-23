@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.2.3
+// @version      1.2.4
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.3';
+  const VERSION = '1.2.4';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -977,12 +977,16 @@
       const t = $('ps-aud-toggle');
       t.hidden = !state.aud;
       if (state.aud) t.title = `Current: ${state.aud.name} (${state.aud.type} segment #${state.aud.id}${state.aud.source === 'manual' ? ', chosen manually' : ', from the campaign'})`;
-      // Reset only makes sense when a different segment was chosen AND the campaign's own
-      // audience is known. Hidden for campaigns with no audience or one we could not read.
+      // Shown whenever a segment was chosen by hand (and it isn't the campaign's own). Reset goes back
+      // to the campaign's audience, or, when the campaign has none ProofSet can use, to the test proof.
       const camp = getCampaignAudience(ci.id);
       const r = $('ps-aud-reset');
-      r.hidden = !(state.aud && state.aud.source === 'manual' && camp && !sameAud(camp, state.aud));
-      if (!r.hidden) r.title = `Back to the campaign's audience: ${camp.name} (${camp.type} segment #${camp.id})`;
+      r.hidden = !(state.aud && state.aud.source === 'manual' && !(camp && sameAud(camp, state.aud)));
+      if (!r.hidden) {
+        r.title = camp
+          ? `Back to the campaign's audience: ${camp.name} (${camp.type} segment #${camp.id})`
+          : "Remove the chosen segment. This campaign has no segment ProofSet can use, so a test proof is shown.";
+      }
     };
     paintAudience();
     $('ps-aud-toggle').onclick = () => showAudEdit($('ps-aud').hidden);
@@ -991,6 +995,7 @@
       state.aud = getCampaignAudience(ci.id);
       paintAudience();
       showAudEdit(false);
+      if (!state.aud) return renderTestProof(NO_AUD_MSG); // campaign has no usable audience
       const v = firstBatchView(ci.id, state.aud);
       if (v) await renderProofs(v);
       else await pickAndRender();
