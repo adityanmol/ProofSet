@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.2.1
+// @version      1.2.2
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.1';
+  const VERSION = '1.2.2';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -256,6 +256,12 @@
     throw new Error('Timed out waiting for segment users.');
   }
 
+  // Shown when there is no usable audience, so the drawer is never blank. Not a real customer.
+  const TEST_EMAIL = 'test@useinsider.com';
+  const TEST_USER = { dummy: true, insiderId: '', email: TEST_EMAIL, label: TEST_EMAIL };
+  const userKey = (u) => (u.dummy ? `em:${u.email}` : u.insiderId);
+  const audError = (code, message) => Object.assign(new Error(message), { code });
+
   function getStoredUsers(cid, aud) {
     try { return JSON.parse(sessionStorage.getItem(SS_USERS(cid, aud)) || 'null'); } catch (e) { return null; }
   }
@@ -268,8 +274,10 @@
     const hit = contactsCache.get(ck);
     const contacts = hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit.contacts : await fetchSegmentContacts(aud);
     if (contacts.length && (!hit || hit.contacts !== contacts)) contactsCache.set(ck, { at: Date.now(), contacts });
-    const usable = contacts.filter((c) => c.insider_id);
-    if (!usable.length) throw new Error('No users found in this segment.');
+    if (!contacts.length) throw audError('empty', 'No customers were found in this segment.');
+    // An email can only go to customers with an email address; a segment with none is not valid here.
+    const usable = contacts.filter((c) => c.insider_id && /@/.test(c.email || ''));
+    if (!usable.length) throw audError('noemail', "This seems to be an invalid segment: it doesn't contain email addresses for this partner.");
     // The whole loaded pool is shuffled once; batches of CFG.sampleSize are shown from it in order.
     const order = shuffle(usable).map((c) => ({ insiderId: c.insider_id, label: maskEmail(c.email) }));
     const st = { order, shown: Math.min(CFG.sampleSize, order.length), pool: usable.length, at: Date.now() };
@@ -306,6 +314,10 @@
         || (g['EMAIL_LOCALIZATION_STORE/getActiveVariation'] || {}).originalSubject || '',
       preHeader: g['EMAIL_LOCALIZATION_STORE/getMailPreHeaderText'] || '',
       isLiquid: !!g['EMAIL_LOCALIZATION_STORE/getIsLiquidSyntax'],
+      // Sent by IO's own "Previewing As" too. Product recommendation blocks (drag & drop editor) are
+      // filled from these feed URLs; without them IO returns the email with those blocks emptied.
+      plainText: g['EMAIL_LOCALIZATION_STORE/getPlainText'] || '',
+      recUrls: g['EMAIL_LOCALIZATION_STORE/getRecommendationUrls'] || {},
     };
   }
 
@@ -314,7 +326,7 @@
   const renderCache = new Map();
   const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
   async function renderForUser(tpl, user) {
-    const key = `${user.insiderId}|${fnv(`${tpl.isLiquid}|${tpl.subject}|${tpl.preHeader}|${tpl.html}`)}`;
+    const key = `${userKey(user)}|${fnv(`${tpl.isLiquid}|${tpl.subject}|${tpl.preHeader}|${JSON.stringify(tpl.recUrls)}|${tpl.html}`)}`;
     if (renderCache.has(key)) return { ...renderCache.get(key), user };
     const r = await renderFromIO(tpl, user);
     if (!r.error) {
@@ -327,10 +339,13 @@
     const body = {
       couponListId: 0,
       isLiquidSyntax: tpl.isLiquid,
-      user: { identifierType: 'insider_id', identifierValue: user.insiderId },
+      // The test profile has no Profile ID, so it is previewed by email address, like IO's own picker.
+      user: user.dummy ? { identifierType: 'em', identifierValue: user.email } : { identifierType: 'insider_id', identifierValue: user.insiderId },
       subject: b64enc(tpl.subject),
       preHeader: b64enc(tpl.preHeader),
       html: b64enc(tpl.html),
+      plainText: tpl.plainText,
+      recommendationCampaignUrls: tpl.recUrls,
     };
     try {
       const { status, json } = await api('/newsletter/dynamic-content-preview/get-preview-content', {
@@ -628,6 +643,13 @@
   .ps-frame img{width:100%;display:block}
   .ps-load{padding:40px 12px;text-align:center;color:#6b7280;font-size:13px}
   .ps-more{display:flex;justify-content:center;margin:28px 0 8px}
+  .ps-card.ps-new{animation:ps-in .4s cubic-bezier(.2,.8,.2,1) backwards}
+  @keyframes ps-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.ps-card.ps-new{animation:none}}
+  .ps-warn{margin:0 0 20px;padding:12px 14px;border:1px solid #f5d38a;border-left:4px solid #e8a317;border-radius:4px;background:#fff8e6;color:#5c4400;font-size:14px;line-height:1.45}
+  .ps-ch .em.dummy,.ps-mtitle .who.dummy{overflow:visible;color:#2c3546;cursor:help;text-decoration:none}
+  .ps-mtitle h3.has-tip{overflow:visible}
+  .ps-ch .em.dummy::after,.ps-mtitle .who.dummy::after{font-weight:400}
   .ps-empty{border:1px dashed #d1d5db;border-radius:8px;padding:48px;text-align:center;color:#4b5563}
   #ps-zoom{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2147483001;display:flex;justify-content:center;align-items:center;padding:24px;box-sizing:border-box}
   /* Proof popup: 800px wide, 20px body padding and 10px inside the bordered box = 740px for the email.
@@ -986,8 +1008,18 @@
     /* One flow for both "Use segment" and "Refresh Proofs": pick users, then render. */
     async function pickAndRender() {
       showLoading(`Gathering ${CFG.sampleSize} customers from "${state.aud.name}"…`);
-      const picked = await pickRandomUsers(ci.id, state.aud);
+      let picked;
+      try { picked = await pickRandomUsers(ci.id, state.aud); } catch (e) {
+        if (!e.code) throw e;
+        return renderTestProof(`${esc(e.message)} Please link or choose a valid segment.`);
+      }
       await renderProofs(picked);
+    }
+
+    // One proof for the test profile, under a warning, instead of a blank drawer.
+    async function renderTestProof(warnHtml) {
+      showAudEdit(true);
+      await renderProofs({ users: [TEST_USER], more: false, total: 1, test: true, warn: warnHtml });
     }
 
     async function run(task) {
@@ -1016,15 +1048,16 @@
 
     $('ps-refresh').onclick = () => run(async () => {
       if (!state.aud) { state.aud = getAudience(ci.id); paintAudience(); } // may have been saved since the drawer opened
-      if (!state.aud) showAudEdit(true);
-      if (!state.aud) throw new Error('Set the audience first: open the Recipients step once, or paste a segment link above.');
+      if (!state.aud) return renderTestProof(NO_AUD_MSG);
       await pickAndRender();
     });
+
+    const NO_AUD_MSG = "ProofSet couldn't find this campaign's audience yet. Paste a segment link above and press <b>Use segment</b>, "
+      + 'or open the <b>Recipients</b> step once and ProofSet picks up the campaign\'s segment by itself.';
 
     async function renderProofs(view, opts = {}) {
       const users = view.users;
       const drawer = $('ps-drawer');
-      const keepTop = opts.keepScroll ? drawer.scrollTop : null;
       let tpl;
       try { tpl = currentTemplate(); } catch (e) { $('ps-body').innerHTML = `<div class="ps-empty">${esc(e.message)}</div>`; return; }
 
@@ -1035,24 +1068,49 @@
         $('ps-meta').innerHTML = `<span class="ps-spin sm"></span> Rendering proofs: <b>${done} of ${users.length}</b> ready. ${esc(FUN[done % FUN.length])}`;
       };
       progress();
-      const grid = document.createElement('div');
-      grid.className = 'ps-grid';
-      $('ps-body').innerHTML = '';
-      $('ps-body').appendChild(grid);
-      if (keepTop !== null) drawer.scrollTop = keepTop;
+      // Load more keeps the grid and the proofs already on screen (and the scroll position) and only
+      // adds cards for the new customers below them.
+      let grid = opts.append ? $('ps-body').querySelector('.ps-grid') : null;
+      const existing = new Map();
+      if (grid) {
+        [...grid.children].forEach((c) => { if (c._psUser) existing.set(userKey(c._psUser), c); });
+        $('ps-body').querySelectorAll('.ps-more').forEach((m) => m.remove());
+      } else {
+        grid = document.createElement('div');
+        grid.className = 'ps-grid';
+        $('ps-body').innerHTML = view.warn ? `<div class="ps-warn" role="alert">${view.warn}</div>` : '';
+        $('ps-body').appendChild(grid);
+      }
 
+      const added = [];
       const cards = users.map((u) => {
+        const had = existing.get(userKey(u));
+        if (had) return had;
         const c = document.createElement('div');
-        c.className = 'ps-card';
-        c.innerHTML = `<div class="ps-ch"><a class="em" href="${profileUrl(u.insiderId)}" target="_blank" rel="noopener" title="Open customer profile in IO">${esc(u.label)}</a><span class="sz">…</span></div><span class="ps-ver"></span>
+        c.className = 'ps-card' + (opts.append ? ' ps-new' : '');
+        c._psUser = u;
+        const who = u.dummy
+          ? `<span class="em dummy ps-tip" data-tip="Test InsiderOne Profile" aria-label="${esc(u.label)}, Test InsiderOne Profile">${esc(u.label)}</span>`
+          : `<a class="em" href="${profileUrl(u.insiderId)}" target="_blank" rel="noopener" title="Open customer profile in IO">${esc(u.label)}</a>`;
+        c.innerHTML = `<div class="ps-ch">${who}<span class="sz">…</span></div><span class="ps-ver"></span>
           <div class="ps-flags"></div>
           <div class="ps-sub"><b>Subject:</b> <span class="sj">…</span></div>
           <div class="ps-frame"><div class="ps-load">Rendering…</div></div>`;
         grid.appendChild(c);
+        added.push(c);
         return c;
       });
+      done = cards.length - added.length;
+      progress();
+      if (added.length && opts.append) {
+        // Bring the first new card into view gently; the proofs above stay where they are.
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const top = added[0].getBoundingClientRect().top - drawer.getBoundingClientRect().top + drawer.scrollTop - 24;
+        if (top > drawer.scrollTop) drawer.scrollTo({ top, behavior: reduce ? 'auto' : 'smooth' });
+      }
 
       const results = await pool(users, CFG.concurrency, async (u, i) => {
+        if (!added.includes(cards[i]) && cards[i]._psResult) return cards[i]._psResult; // already on screen
         const r = await renderForUser(tpl, u);
         fillCard(cards[i], r);
         done++;
@@ -1073,7 +1131,7 @@
       results.forEach((r, i) => {
         paintFlags(cards[i], flagsFor(r));
         const sg = sigs[i];
-        if (sg) {
+        if (sg && !view.test) {
           const n = groupSize[sg];
           cards[i].querySelector('.ps-ver').innerHTML =
             (n > 1
@@ -1096,12 +1154,14 @@
         });
         ordered.forEach((it) => grid.appendChild(it.card));
       };
-      let active = null; // null = original order
+      let active = grid._psSort || null; // null = original order; kept when more proofs are loaded
+      if (active) applySort(active);
       const paintSeg = () => segBtns.forEach((b) => b.classList.toggle('on', b.dataset.m === active));
       segBtns.forEach((b) => {
         b.onclick = () => {
           // Clicking the active option switches to the other one, so repeated clicks alternate.
           active = b.dataset.m === active ? (active === 'unique' ? 'similar' : 'unique') : b.dataset.m;
+          grid._psSort = active;
           applySort(active);
           paintSeg();
         };
@@ -1124,7 +1184,9 @@
       let versionNote = '';
       if (ok.length > 1 && next === 1) versionNote = ' · All customers in this sample see the same design: personalization is not changing anything for them.';
       else if (ok.length > 1) versionNote = ` · ${next} distinct design(s) across ${ok.length} customers.`;
-      $('ps-meta').innerHTML = `<div class="l1">Here's a sample of what your customers in <span class="aud">${esc(state.aud.name)}</span> will receive.</div>`
+      $('ps-meta').innerHTML = (view.test
+        ? `<div class="l1">Showing a test proof for <b>${TEST_EMAIL}</b> (Test InsiderOne Profile), not a real customer.</div>`
+        : `<div class="l1">Here's a sample of what your customers in <span class="aud">${esc(state.aud.name)}</span> will receive.</div>`)
         + `<div class="l2">Estimated Template Size: <b>${kb(avg)} KB</b>${esc(versionNote)}`
         + (failed ? ` · ${failed} proof(s) failed.` : '') + '</div>';
 
@@ -1138,11 +1200,10 @@
         mb.onclick = () => {
           mb.disabled = true;
           mb.innerHTML = `<span class="ps-spin sm"></span>Loading ${CFG.sampleSize} more proofs…`;
-          run(() => renderProofs(loadMoreUsers(ci.id, state.aud), { keepScroll: true }));
+          run(() => renderProofs(loadMoreUsers(ci.id, state.aud), { append: true }));
         };
         $('ps-body').appendChild(more);
       }
-      if (keepTop !== null) drawer.scrollTop = keepTop;
     }
 
     function fillCard(card, r) {
@@ -1243,7 +1304,17 @@
         const r = card._psResult;
         const who = q('.who');
         who.textContent = r.user.label;
-        who.href = profileUrl(r.user.insiderId);
+        if (r.user.dummy) {
+          who.removeAttribute('href');
+          who.classList.add('dummy', 'ps-tip');
+          who.dataset.tip = 'Test InsiderOne Profile';
+          who.removeAttribute('title');
+        } else {
+          who.href = profileUrl(r.user.insiderId);
+          who.classList.remove('dummy', 'ps-tip');
+          who.title = 'Open customer profile in IO';
+        }
+        who.closest('h3').classList.toggle('has-tip', !!r.user.dummy);
         q('.ps-modal').setAttribute('aria-label', `Proof for ${r.user.label}`);
         q('.pos').textContent = `${idx + 1} / ${list.length}`;
         q('[data-nav="-1"]').disabled = idx === 0;
@@ -1308,14 +1379,7 @@
     }
 
     function showStoredOrEmpty() {
-      if (!state.aud) {
-        $('ps-meta').textContent = '';
-        $('ps-body').innerHTML = `<div class="ps-empty">ProofSet couldn't find this campaign's audience yet.<br><br>
-          Paste a segment link above and press <b>Use segment</b> (or Enter), and the proofs start rendering right away.<br>
-          Or open the <b>Recipients</b> step once, and ProofSet will pick up the campaign's segment by itself.</div>`;
-        showAudEdit(true);
-        return;
-      }
+      if (!state.aud) { run(() => renderTestProof(NO_AUD_MSG)); return; }
       const v = storedView(getStoredUsers(ci.id, state.aud));
       if (v) {
         run(() => renderProofs(v)); // same customers as earlier in this session

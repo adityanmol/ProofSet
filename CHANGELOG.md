@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2
+
+- Load more proofs now adds the new proofs below the ones already on screen. The grid no longer rebuilds or jumps to the top: existing proofs stay as they are, the new cards fade in, and the drawer scrolls gently to the first new one. The chosen sort (Unique first / Similar together) is kept.
+- Fix: emails built in IO's drag & drop editor with product recommendation blocks ("You May Also Like") showed empty proofs. ProofSet now sends the same extra fields IO's own "Previewing As" sends (the recommendation feed URLs and the plain-text version), so those blocks are filled.
+- Segment check: if the campaign's segment (or a pasted one) has no customers, or none of them has an email address, ProofSet shows a warning ("This seems to be an invalid segment... Please link or choose a valid segment"), opens the segment field, and shows a single proof for test@useinsider.com instead of a blank drawer. The same test proof shows when no audience is known yet. The test profile is not linked to any profile; hovering it shows "Test InsiderOne Profile".
+- Customers without an email address are no longer picked for proofs.
+
 ## 1.2.1
 
 - Fix: a tab that already had a sample saved by an older version kept showing those 10 customers with no "Load more proofs". Samples saved before 1.2.0 are now ignored, so ProofSet gathers a fresh 8 (one segment lookup) and the button appears.
