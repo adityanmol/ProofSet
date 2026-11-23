@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3
+
+- Fix: reopening ProofSet showed every proof loaded earlier in the tab (e.g. 24 after two Load mores). It now always opens with the first 8 (same customers, from cache) and Load more adds the next 8 on click.
+- Slider tooltips read "Previous proof" / "Next proof" (the arrow keys still work).
+- Change audience is now a searchable segment picker: type part of a segment name (or its ID) and pick it from the list, with Up / Down / Enter or the mouse. Static and dynamic segments are listed together with their type and ID; the current one is marked. The two segment lists are loaded once, when the field is first used, and kept for 10 minutes; searching happens in the browser. Pasting a /static-segments/ID or /dynamic-segments/ID link still works.
+
 ## 1.2.2
 
 - Load more proofs now adds the new proofs below the ones already on screen. The grid no longer rebuilds or jumps to the top: existing proofs stay as they are, the new cards fade in, and the drawer scrolls gently to the first new one. The chosen sort (Unique first / Similar together) is kept.

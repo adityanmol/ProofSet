@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.2.2
+// @version      1.2.3
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.2';
+  const VERSION = '1.2.3';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -290,6 +290,14 @@
     if (!st || !st.order || !st.order.length) return null;
     const shown = Math.max(1, Math.min(st.shown || CFG.sampleSize, st.order.length));
     return { users: st.order.slice(0, shown), pool: st.pool, more: st.order.length > shown, total: st.order.length };
+  }
+  // Back to the first batch (drawer opened again, or audience reset). Same customers, same order.
+  function firstBatchView(cid, aud) {
+    const st = getStoredUsers(cid, aud);
+    if (!st || !st.order || !st.order.length) return null;
+    st.shown = Math.min(CFG.sampleSize, st.order.length);
+    sessionStorage.setItem(SS_USERS(cid, aud), JSON.stringify(st));
+    return storedView(st);
   }
   // Adds the next batch of customers from the same shuffled pool (no new segment call).
   function loadMoreUsers(cid, aud) {
@@ -607,7 +615,16 @@
   .ps-seg button.on{background:#0a2ecc;color:#fff}
   .ps-aud{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;align-items:center;font-size:13px;color:#656f85;background:#f7f8fa;border:1px solid #e1e5ea;border-radius:4px;padding:10px 12px}
   .ps-aud[hidden]{display:none}
-  .ps-aud input{flex:1 1 360px;max-width:560px;min-width:0;height:32px;border:1px solid #c9d0d9;border-radius:4px;padding:0 8px;font-family:inherit;color:#2c3546;background:#fff}
+  .ps-combo{position:relative;flex:1 1 360px;max-width:560px;min-width:0;display:flex}
+  .ps-aud-list{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:10;max-height:280px;overflow:auto;background:#fff;border:1px solid #c9d0d9;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px 0}
+  .ps-aud-list[hidden]{display:none}
+  .ps-opt{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:13px;color:#2c3546;cursor:pointer}
+  .ps-opt.hi,.ps-opt:hover{background:#eef1fd}
+  .ps-opt .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-opt .ty{flex:none;font-size:11px;color:#656f85}
+  .ps-opt .cur{flex:none;font-size:11px;color:#0a2ecc;font-weight:600}
+  .ps-opt-empty{padding:8px 10px;font-size:13px;color:#656f85}
+  .ps-aud input{flex:1 1 auto;width:100%;min-width:0;height:32px;border:1px solid #c9d0d9;border-radius:4px;padding:0 8px;font-family:inherit;color:#2c3546;background:#fff}
   .ps-aud input:focus{outline:none;border-color:#0a2ecc;box-shadow:0 0 0 2px #dae1fb}
   .ps-link{border:0;background:none;padding:0;color:#0a2ecc;font-family:inherit;font-size:13px;cursor:pointer}
   .ps-link:hover{text-decoration:underline}
@@ -705,7 +722,7 @@
     .ps-bar{margin-top:14px}
     .ps-b{height:34px;padding:0 10px;font-size:13px}
     .ps-aud{font-size:12px}
-    .ps-aud input{flex:1 1 100%;max-width:none}
+    .ps-combo{flex:1 1 100%;max-width:none}
     .ps-meta{font-size:14px}
     .ps-bar{align-items:flex-start}
     .ps-empty{padding:28px 16px}
@@ -907,8 +924,12 @@
           </div>
         </div>
         <div class="ps-aud" id="ps-aud" hidden>
-          <span id="ps-aud-label">Segment link:</span>
-          <input id="ps-aud-link" placeholder="…/dynamic-segments/76 or …/static-segments/2">
+          <span id="ps-aud-label">Segment:</span>
+          <div class="ps-combo">
+            <input id="ps-aud-link" role="combobox" aria-expanded="false" aria-controls="ps-aud-list" aria-autocomplete="list" autocomplete="off"
+              placeholder="Search segments by name or ID, or paste a segment link">
+            <div class="ps-aud-list" id="ps-aud-list" role="listbox" hidden></div>
+          </div>
           <button class="ps-b" id="ps-aud-set">Use segment</button>
           <button class="ps-link" id="ps-aud-cancel" hidden>Cancel</button>
         </div>
@@ -948,7 +969,8 @@
     const showAudEdit = (show) => {
       $('ps-aud').hidden = !show;
       $('ps-aud-cancel').hidden = !state.aud;
-      $('ps-aud-label').textContent = state.aud ? 'Use a different segment:' : 'Segment link:';
+      $('ps-aud-label').textContent = state.aud ? 'Use a different segment:' : 'Segment:';
+      if (!show) closeList();
       if (show) setTimeout(() => $('ps-aud-link').focus(), 0);
     };
     const paintAudience = () => {
@@ -969,7 +991,7 @@
       state.aud = getCampaignAudience(ci.id);
       paintAudience();
       showAudEdit(false);
-      const v = storedView(getStoredUsers(ci.id, state.aud));
+      const v = firstBatchView(ci.id, state.aud);
       if (v) await renderProofs(v);
       else await pickAndRender();
     });
@@ -1031,11 +1053,99 @@
       } finally { setBusy(false); }
     }
 
+    // Searchable segment picker. Both segment lists are loaded once, when the field is first used
+    // (2 list requests, kept for 10 minutes), and searched locally while typing. A pasted
+    // /static-segments/ID or /dynamic-segments/ID link still works.
+    const pick = { all: null, at: 0, loading: null, shown: [], hi: -1, chosen: null };
+    const isLink = (v) => /\/(dynamic|static)-segments\/\d+/.test(v);
+    async function loadSegments() {
+      if (pick.all && Date.now() - pick.at < 10 * 60 * 1000) return pick.all;
+      if (!pick.loading) {
+        pick.loading = Promise.all([staticSegmentList(), dynamicSegmentList()]).then(([st, dy]) => {
+          pick.all = [...st.map((x) => ({ ...x, type: 'static' })), ...dy.map((x) => ({ ...x, type: 'dynamic' }))]
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+          pick.at = Date.now();
+          return pick.all;
+        }).finally(() => { pick.loading = null; });
+      }
+      return pick.loading;
+    }
+    const listEl = () => $('ps-aud-list');
+    function closeList() { listEl().hidden = true; $('ps-aud-link').setAttribute('aria-expanded', 'false'); pick.hi = -1; }
+    function paintList() {
+      const el = listEl();
+      if (!pick.shown.length) {
+        el.innerHTML = `<div class="ps-opt-empty">${pick.all ? 'No segment matches.' : 'Loading segments…'}</div>`;
+      } else {
+        el.innerHTML = pick.shown.map((sg, i) => {
+          const cur = state.aud && sameAud(sg, state.aud);
+          return `<div class="ps-opt${i === pick.hi ? ' hi' : ''}" role="option" id="ps-opt-${i}" data-i="${i}" aria-selected="${i === pick.hi}">
+            <span class="nm">${esc(sg.name)}</span><span class="ty">${sg.type === 'static' ? 'Static' : 'Dynamic'} #${esc(sg.id)}</span>${cur ? '<span class="cur">Current</span>' : ''}</div>`;
+        }).join('');
+        const hi = el.querySelector('.ps-opt.hi');
+        if (hi) hi.scrollIntoView({ block: 'nearest' });
+      }
+      el.hidden = false;
+      $('ps-aud-link').setAttribute('aria-expanded', 'true');
+      $('ps-aud-link').setAttribute('aria-activedescendant', pick.hi >= 0 ? `ps-opt-${pick.hi}` : '');
+    }
+    async function filterList() {
+      const q = $('ps-aud-link').value.trim().toLowerCase();
+      pick.chosen = null;
+      if (isLink(q)) { closeList(); return; } // a pasted link is used as is
+      paintList();
+      const all = await loadSegments().catch(() => []);
+      if (q !== $('ps-aud-link').value.trim().toLowerCase()) return; // typed on meanwhile
+      pick.shown = all.filter((sg) => !q || String(sg.name).toLowerCase().includes(q) || String(sg.id) === q).slice(0, 50);
+      pick.hi = pick.shown.length ? 0 : -1;
+      if (document.activeElement === $('ps-aud-link')) paintList();
+    }
+    function choose(i) {
+      const sg = pick.shown[i];
+      if (!sg) return;
+      pick.chosen = sg;
+      $('ps-aud-link').value = sg.name;
+      closeList();
+      $('ps-aud-set').click();
+    }
+    const inp = $('ps-aud-link');
+    inp.addEventListener('focus', filterList);
+    inp.addEventListener('input', filterList);
+    inp.addEventListener('keydown', (e) => {
+      const open = !listEl().hidden && pick.shown.length;
+      if (e.key === 'ArrowDown' && open) { e.preventDefault(); pick.hi = Math.min(pick.shown.length - 1, pick.hi + 1); paintList(); }
+      else if (e.key === 'ArrowUp' && open) { e.preventDefault(); pick.hi = Math.max(0, pick.hi - 1); paintList(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (open && pick.hi >= 0 && !isLink(inp.value)) choose(pick.hi); else $('ps-aud-set').click(); }
+      else if (e.key === 'Escape') { e.stopPropagation(); closeList(); }
+    });
+    listEl().addEventListener('mousedown', (e) => {
+      const o = e.target.closest('.ps-opt');
+      if (!o) return;
+      e.preventDefault(); // keep focus in the field
+      choose(Number(o.dataset.i));
+    });
+    ov.addEventListener('mousedown', (e) => { if (!e.target.closest('.ps-combo')) closeList(); });
+
     $('ps-aud-set').onclick = () => run(async () => {
       const link = $('ps-aud-link').value.trim();
-      if (!link) throw new Error('Paste a segment link first (…/dynamic-segments/76 or …/static-segments/2).');
+      let chosen = pick.chosen ? { ...pick.chosen, source: 'manual' } : null;
+      if (!chosen && !isLink(link)) {
+        // Typed a name without picking: take it if exactly one segment matches.
+        const all = await loadSegments().catch(() => []);
+        const q = link.toLowerCase();
+        const hits = q ? all.filter((sg) => String(sg.name).toLowerCase() === q || String(sg.id) === q) : [];
+        if (hits.length === 1) chosen = { ...hits[0], source: 'manual' };
+        else throw new Error(link ? `Pick a segment from the list (${hits.length ? 'more than one' : 'none'} matches "${link}").` : 'Search for a segment or paste a segment link first.');
+      }
       showLoading('Looking up the segment…');
-      const chosen = await audienceFromLink(link);
+      if (!chosen && pick.all) { // link pasted after the lists were loaded: no need to ask IO again
+        const m = link.match(/\/(dynamic|static)-segments\/(\d+)/);
+        const hit = pick.all.find((sg) => sg.type === m[1] && Number(sg.id) === Number(m[2]));
+        if (hit) chosen = { ...hit, source: 'manual' };
+      }
+      if (!chosen) chosen = await audienceFromLink(link);
+      pick.chosen = null;
+      closeList();
       const camp = getCampaignAudience(ci.id);
       if (sameAud(chosen, camp)) { clearOverrideAudience(ci.id); state.aud = camp; } // picked the campaign's own segment
       else { setOverrideAudience(ci.id, chosen); state.aud = getOverrideAudience(ci.id); }
@@ -1044,7 +1154,6 @@
       showAudEdit(false);
       await pickAndRender(); // submitting a segment always starts rendering, no extra click
     });
-    $('ps-aud-link').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('ps-aud-set').click(); });
 
     $('ps-refresh').onclick = () => run(async () => {
       if (!state.aud) { state.aud = getAudience(ci.id); paintAudience(); } // may have been saved since the drawer opened
@@ -1052,7 +1161,7 @@
       await pickAndRender();
     });
 
-    const NO_AUD_MSG = "ProofSet couldn't find this campaign's audience yet. Paste a segment link above and press <b>Use segment</b>, "
+    const NO_AUD_MSG = "ProofSet couldn't find this campaign's audience yet. Search for a segment above (or paste its link), "
       + 'or open the <b>Recipients</b> step once and ProofSet picks up the campaign\'s segment by itself.';
 
     async function renderProofs(view, opts = {}) {
@@ -1279,9 +1388,9 @@
           <div class="ps-msubbar">
             <div class="ps-msubj"></div>
             <div class="ps-mnav">
-              <button type="button" class="ps-tip" data-nav="-1" data-tip="Previous proof (Left arrow)" aria-label="Previous proof">${ioIcon('line-chevron-left', 18)}</button>
+              <button type="button" class="ps-tip" data-nav="-1" data-tip="Previous proof" aria-label="Previous proof">${ioIcon('line-chevron-left', 18)}</button>
               <span class="pos" aria-live="polite"></span>
-              <button type="button" class="ps-tip tip-r" data-nav="1" data-tip="Next proof (Right arrow)" aria-label="Next proof">${ioIcon('line-chevron-right', 18)}</button>
+              <button type="button" class="ps-tip tip-r" data-nav="1" data-tip="Next proof" aria-label="Next proof">${ioIcon('line-chevron-right', 18)}</button>
             </div>
           </div>
           <div class="ps-mb"><div class="ps-mslide"></div></div>
@@ -1380,7 +1489,7 @@
 
     function showStoredOrEmpty() {
       if (!state.aud) { run(() => renderTestProof(NO_AUD_MSG)); return; }
-      const v = storedView(getStoredUsers(ci.id, state.aud));
+      const v = firstBatchView(ci.id, state.aud); // always the first 8; Load more adds the rest
       if (v) {
         run(() => renderProofs(v)); // same customers as earlier in this session
       } else {
