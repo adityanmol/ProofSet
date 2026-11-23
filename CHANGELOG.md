@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7
+
+- Fix: the Desktop switch in the proof popup stayed at mobile width. Responsive templates (e.g. width="700" with max-width:100%) shrink to 375px in Mobile, and switching back re-measured the email before it had grown again. Desktop now uses the width the template is built at (its widest declared table width, 700px for the Teleflora template; 600px if none), growing only if the content is genuinely wider.
+- Proof popup: no shadow around the email frame.
+- Cards: 5px inner padding.
+- Header: version shown as a superscript on "ProofSet" (8px), with "by Proofly" right-aligned under the wordmark.
+- Click the version superscript to check for an update immediately (ignores the 6-hour wait); if a newer version exists, the Update badge appears on the button.
+
 ## 1.0.6
 
 - Update notice on the ProofSet button. When a newer version is published on this build's own branch (main for production, pre-prod for pre-prod), an orange "Update vX.Y.Z" badge appears on the button. Clicking it opens a small prompt with Later / Update; Update opens the Tampermonkey install page in a new tab and the badge turns into "Refresh to finish". On returning to the IO tab the prompt asks to refresh (with a reminder to save the design first). After the refresh, the button briefly shows "Updated to vX.Y.Z".

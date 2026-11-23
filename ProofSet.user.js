@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.0.6
+// @version      1.0.7
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for 10 customers in the campaign audience.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -48,7 +48,7 @@
   const CHANNEL = 'prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.0.6';
+  const VERSION = '1.0.7';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -447,6 +447,21 @@
 
   /* ---------------- iframe sizing ---------------- */
 
+  // The width an email template is built at: the widest table width declared in its HTML
+  // (width="700", width:700px or max-width:700px), between 320 and 1400px. Defaults to 600.
+  function builtWidth(html) {
+    let w = 0;
+    const take = (v) => { const n = parseInt(v, 10); if (n >= 320 && n <= 1400 && n > w) w = n; };
+    (html.match(/<table\b[^>]*>/gi) || []).forEach((t) => {
+      const a = t.match(/\swidth\s*=\s*["']?(\d{3,4})(?!\s*%)/i);
+      if (a) take(a[1]);
+      const st = (t.match(/\sstyle\s*=\s*(["'])([^"']*)\1/i) || [])[2] || '';
+      const m = st.match(/(?:^|;)\s*(?:max-)?width\s*:\s*(\d{3,4})px/gi) || [];
+      m.forEach((x) => take(x.replace(/\D+/g, ' ').trim().split(' ').pop()));
+    });
+    return w || 600;
+  }
+
   // Natural content size of a same-origin (sandboxed, no scripts) srcdoc iframe.
   function contentSize(ifr) {
     try {
@@ -520,11 +535,13 @@
   .ps-btn.is-pre{border-style:dashed}
   #ps-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2147483000;display:flex;justify-content:flex-end}
   #ps-drawer{width:min(100vw,96vw);height:100%;background:#fff;overflow:auto;padding:28px 36px;box-sizing:border-box;font-family:Figtree,system-ui,-apple-system,sans-serif;color:#2c3546}
-  .ps-brand{display:flex;flex-direction:column;gap:2px}
-  .ps-logo{margin:0;font-size:32px;line-height:1.05;font-weight:700;letter-spacing:-.5px;color:#0a2ecc}
-  .ps-brand-sub{display:flex;align-items:center;gap:10px;padding-left:4px;white-space:nowrap}
+  .ps-brand{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px}
+  .ps-logo{position:relative;margin:0;font-size:32px;line-height:1.05;font-weight:700;letter-spacing:-.5px;color:#0a2ecc}
+  .ps-logo sup{position:absolute;left:100%;top:2px;margin-left:4px;font-size:8px;line-height:1;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#656f85;white-space:nowrap}
+  .ps-brand-sub{align-self:flex-end;display:flex;align-items:center;white-space:nowrap}
   .ps-b,.ps-link{white-space:nowrap}
-  .ps-vtag{font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#656f85}
+  .ps-vtag{font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#656f85;cursor:pointer}
+  .ps-vtag:hover{color:#0a2ecc}
   .ps-by{font-size:12px;color:#656f85}
   .ps-by{display:inline-flex;align-items:center;gap:5px}
   .ps-by .pf-logo{display:inline-flex;align-items:center;gap:5px;color:#b54708;font-weight:700;font-size:16px}
@@ -559,7 +576,7 @@
   .ps-link[hidden]{display:none}
   .ps-meta .aud{font-weight:600;color:#2c3546}
   .ps-grid{padding-top:10px;display:grid;row-gap:28px;grid-template-columns:repeat(auto-fill,minmax(min(310px,100%),1fr));column-gap:18px}
-  .ps-card{position:relative;border:1px solid #e5e7eb;border-radius:6px;overflow:visible;background:#fff;display:flex;flex-direction:column}
+  .ps-card{position:relative;padding:5px;border:1px solid #e5e7eb;border-radius:6px;overflow:visible;background:#fff;display:flex;flex-direction:column}
   .ps-card .ps-ver{position:absolute;top:0;right:12px;transform:translateY(-50%);z-index:1;line-height:0}
   .ps-card .ps-ver .ps-flag{display:inline-block;line-height:1.4;border:1px solid #fff;box-shadow:0 0 0 1px #c9d3f9}
   .ps-card .ps-frame{border-radius:0 0 6px 6px}
@@ -606,7 +623,7 @@
   .ps-mopen{display:inline-flex;align-items:center;gap:5px;color:#0a2ecc;font-size:13px;text-decoration:none;white-space:nowrap}
   .ps-mopen:hover{text-decoration:underline}
   .ps-mb{flex:1;min-height:0;overflow:auto;padding:20px;background:#f7f8fa}
-  .ps-mb iframe{display:block;margin:0 auto;border:0;background:#fff;box-shadow:0 0 0 1px #e1e5ea}
+  .ps-mb iframe{display:block;margin:0 auto;border:0;background:#fff}
   @media (max-width:768px){
     #ps-drawer{width:100vw;padding:16px}
     .ps-logo{font-size:26px}
@@ -656,9 +673,9 @@
     for (let i = 0; i < 3; i++) { const d = (x.at(i) || 0) - (y.at(i) || 0); if (d) return d > 0 ? 1 : -1; }
     return 0;
   };
-  async function latestVersion() {
+  async function latestVersion(force = false) {
     const cached = readLS(UPD_CHECK_KEY);
-    if (cached && Date.now() - cached.at < UPD_EVERY_MS) return cached.latest;
+    if (!force && cached && Date.now() - cached.at < UPD_EVERY_MS) return cached.latest;
     try {
       const res = await fetch(UPDATE_URL, { cache: 'no-store', headers: { Range: 'bytes=0-1023' } });
       if (!res.ok) return cached ? cached.latest : null;
@@ -790,8 +807,8 @@
       <div id="ps-drawer">
         <div class="ps-top">
           <div class="ps-brand">
-            <h2 class="ps-logo">ProofSet</h2>
-            <div class="ps-brand-sub"><span class="ps-vtag">v${VERSION}${IS_PROD ? '' : ' \u00b7 pre-prod'}</span><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
+            <h2 class="ps-logo">ProofSet<sup class="ps-vtag" title="Click to check for updates">v${VERSION}${IS_PROD ? '' : ' \u00b7 pre-prod'}</sup></h2>
+            <div class="ps-brand-sub"><span class="ps-by">by ${PROOFLY_LOGO}</span></div>
           </div>
           <div class="ps-actions">
             <button class="ps-link" id="ps-aud-reset" hidden>Reset audience</button>
@@ -819,6 +836,19 @@
     document.body.appendChild(ov);
 
     const $ = (id) => ov.querySelector('#' + id);
+
+    // Click the version to check for an update right now (ignores the 6-hour wait).
+    const vtag = ov.querySelector('.ps-vtag');
+    const vtagText = vtag.textContent;
+    vtag.onclick = async () => {
+      vtag.textContent = 'checking…';
+      const latest = await latestVersion(true);
+      const newer = latest && cmpVer(latest, VERSION) > 0;
+      vtag.textContent = !latest ? 'check failed' : newer ? `v${latest} available` : 'up to date';
+      const cta = document.getElementById(`ps-cta-${CHANNEL}`);
+      if (newer && cta) showUpdateBadge(cta, latest);
+      setTimeout(() => { vtag.textContent = vtagText; }, 4000);
+    };
     const close = () => { ov.remove(); revokeProofUrls(); };
     $('ps-close').onclick = close;
     ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
@@ -1096,11 +1126,13 @@
       z.querySelector('.ps-mclose').onclick = close;
       z.addEventListener('click', (e) => { if (e.target === z) close(); });
 
-      // Desktop: the email's own built width (measured; 600px for most templates). The 700px body
-      // scrolls sideways only when that width is larger. Mobile: 375px, so the email's mobile styles apply.
+      // Desktop: the width the template is built at (its widest declared table width, e.g. 700), never
+      // a measurement taken while the email is squeezed. The 700px body scrolls sideways only when the
+      // email is wider. Mobile: 375px, so the email's own mobile styles apply.
       const MOBILE_W = 375;
+      const BUILT_W = builtWidth(r.html);
       let mode = 'desktop';
-      let natural = { w: 600, h: 400 };
+      let natural = { w: BUILT_W, h: 400 };
       const layout = () => {
         ifr.style.width = (mode === 'mobile' ? MOBILE_W : natural.w) + 'px';
         ifr.style.height = natural.h + 'px';
@@ -1109,12 +1141,7 @@
       segBtns.forEach((b) => {
         b.onclick = () => {
           mode = b.dataset.w;
-          if (mode === 'desktop') {
-            // Re-measure at the base width: responsive emails fill 600, fixed-width ones report their own width.
-            ifr.style.width = '600px';
-            const sz = contentSize(ifr);
-            natural.w = Math.max(320, sz && sz.w ? sz.w : 600);
-          }
+          if (mode === 'desktop') natural.w = BUILT_W;
           segBtns.forEach((x) => x.classList.toggle('on', x === b));
           layout();
         };
@@ -1122,7 +1149,8 @@
       layout();
       document.body.appendChild(z);
       watchSize(ifr, (sz) => {
-        if (mode === 'desktop') natural.w = Math.max(320, sz.w);
+        // Grow only (content genuinely wider than the built width); never shrink below it.
+        if (mode === 'desktop' && sz.w > natural.w) natural.w = Math.min(sz.w, 1400);
         natural.h = sz.h;
         layout();
       });
