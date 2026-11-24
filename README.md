@@ -6,7 +6,7 @@ Bluecore shows proofs of a campaign for several customers from its audience on t
 
 ProofSet is a separate project from Proofly (email client rendering). The two may be combined later.
 
-Current stable version: **1.0.0** (1.2.5 in pre-prod validation).
+Current stable version: **1.0.0** (1.2.6 in pre-prod validation).
 
 ## Install
 
@@ -109,7 +109,7 @@ The template, subject, preheader and Liquid flag come from the editor's Vuex get
 
 - **Internal endpoints:** none of the requests above are published APIs. IO can change them without notice.
 - **Sample source:** customers are drawn from the first page of segment users (up to 100), not the whole segment.
-- **Audience types:** campaigns that target attribute rules or "All contacts" have no list to draw from; pick a segment instead. Excluded segments are ignored.
+- **Audience types:** saved static / dynamic segments, and Email Address attribute rules that list full addresses (each listed address gets a proof). Other attribute rules and "All contacts" have no list to draw from; pick a segment instead. Excluded segments are ignored.
 - **Coupons:** `couponListId` is sent as 0, so coupon codes show as the placeholder.
 - **Recent Users:** each render may add the customer to IO's "Recent Users" list in Previewing As.
 - **Design labels:** visible per-person content (for example a first name in the copy) makes each proof a unique design, which is correct. Tracking that lives outside query strings (for example a code in a link path) is not ignored yet.

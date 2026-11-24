@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.6
+
+- While ProofSet is open, the IO page behind it no longer scrolls (overflow hidden on the page); while a proof popup is open, the proof grid behind it no longer scrolls. Both are put back exactly as they were on close.
+- The loader no longer shows a customer count before it knows one: "Gathering customers from "<segment>"…" (and "Rounding up some lucky subscribers…").
+- Campaigns whose Recipients rule lists email addresses directly (Attributes: Email Address is / contains a@x.com, b@y.com) are now picked up as the campaign's audience. ProofSet previews each listed address (by email address, like IO's own picker), 8 at a time, and links the address to its IO profile when IO returns one. Partial values such as "@brand.com" are ignored. The addresses are kept only in this tab (sessionStorage); localStorage keeps just a count. A saved segment in the same rule still takes priority.
+
 ## 1.2.5
 
 - The segment picker now opens as a dropdown right under "Change audience" in the header (search field + list; a pasted segment link still works with Enter), instead of a separate bar across the drawer. It closes on pick, Esc or a click outside.

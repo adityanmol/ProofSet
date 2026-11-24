@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.2.5
+// @version      1.2.6
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -48,7 +48,7 @@
   const CHANNEL = 'prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.5';
+  const VERSION = '1.2.6';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -68,6 +68,10 @@
   const LS_CAMPAIGN_AUD = (cid) => `proofset:campaign-audience:${PANEL}:${cid}`; // captured from Recipients
   const LS_OVERRIDE_AUD = (cid) => `proofset:override-audience:${PANEL}:${cid}`; // pasted segment link
   const SS_USERS = (cid, aud) => `proofset:users:${PANEL}:${cid}:${aud.type}_${aud.id}`;
+  const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+  const SS_EMAILS = (cid, id) => `proofset:rule-emails:${PANEL}:${cid}:${id}`;
+  // How an audience is described in tooltips.
+  const audDesc = (a) => (a.type === 'emails' ? `${a.name}, from the Recipients step` : `${a.name} (${a.type} segment #${a.id})`);
 
   /* ---------------- helpers ---------------- */
 
@@ -180,6 +184,9 @@
   }
 
   // Reads the segment rule shown on the Recipients step (e.g. "Static Segment Name is X").
+  // Also picks up "Attributes: Email Address is / contains a@x.com, b@y.com" conditions: full email
+  // addresses listed in the rule (type 'emails'). Partial values such as "@brand.com" are ignored.
+  const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
   function readRecipientRule() {
     for (const vm of vueVms()) {
       const qd = vm.$data && vm.$data.queryDescriptions;
@@ -187,9 +194,13 @@
       const found = [];
       qd.groups.flat().forEach((c) => {
         if (!c || !c.title || !c.value) return;
+        const negated = /not/i.test(c.operator || '');
         const type = /static segment/i.test(c.title) ? 'static' : /dynamic segment/i.test(c.title) ? 'dynamic' : null;
-        if (!type) return;
-        found.push({ type, name: c.value, negated: /not/i.test(c.operator || '') });
+        if (type) { found.push({ type, name: c.value, negated }); return; }
+        if (/attribute/i.test(c.title) && /e-?mail/i.test(c.name || '') && /^(is|equals?|contains|in|is one of)$/i.test(String(c.operator || '').trim())) {
+          const emails = [...new Set(String(c.value).split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_RE.test(e)))];
+          if (emails.length) found.push({ type: 'emails', emails, negated });
+        }
       });
       if (found.length) return found;
     }
@@ -202,8 +213,20 @@
     if (!ci || ci.step !== 'recipients') return;
     const rule = readRecipientRule();
     if (!rule) return;
-    const include = rule.find((r) => !r.negated);
-    if (!include) return;
+    // A saved segment wins; otherwise the email addresses listed in an Email Address attribute rule.
+    const include = rule.find((r) => !r.negated && r.type !== 'emails');
+    if (!include) {
+      const emails = [...new Set(rule.filter((r) => !r.negated && r.type === 'emails').flatMap((r) => r.emails))];
+      if (!emails.length) return;
+      const key = `${ci.id}:emails:${emails.join(',')}`;
+      if (key === lastCapturedKey) return;
+      lastCapturedKey = key;
+      // The addresses stay in this tab only (sessionStorage); localStorage keeps just a count and an id.
+      const id = fnv(emails.join(','));
+      sessionStorage.setItem(SS_EMAILS(ci.id, id), JSON.stringify(emails));
+      setCampaignAudience(ci.id, { type: 'emails', id, name: `Email Address rule (${emails.length} address${emails.length === 1 ? '' : 'es'})`, count: emails.length });
+      return;
+    }
     const key = `${ci.id}:${include.type}:${include.name}`;
     if (key === lastCapturedKey) return;
     lastCapturedKey = key;
@@ -257,7 +280,7 @@
   // Shown when there is no usable audience, so the drawer is never blank. Not a real customer.
   const TEST_EMAIL = 'test@useinsider.com';
   const TEST_USER = { dummy: true, insiderId: '', email: TEST_EMAIL, label: TEST_EMAIL };
-  const userKey = (u) => (u.dummy ? `em:${u.email}` : u.insiderId);
+  const userKey = (u) => (u.dummy || u.byEmail ? `em:${u.email}` : u.insiderId);
   const audError = (code, message) => Object.assign(new Error(message), { code });
 
   function getStoredUsers(cid, aud) {
@@ -268,6 +291,16 @@
   // IO's segment service again.
   const contactsCache = new Map();
   async function pickRandomUsers(cid, aud) {
+    if (aud.type === 'emails') {
+      // Email addresses typed into the campaign's rule: no segment call, previewed by email address.
+      let emails = null;
+      try { emails = JSON.parse(sessionStorage.getItem(SS_EMAILS(cid, aud.id)) || 'null'); } catch (e) { /* ignore */ }
+      if (!emails || !emails.length) throw audError('stale', "The campaign's Recipients rule lists email addresses, but ProofSet hasn't read them in this tab yet. Open the Recipients step once, then come back.");
+      const order = shuffle(emails.slice()).map((e) => ({ byEmail: true, email: e, insiderId: '', label: maskEmail(e) }));
+      const st = { order, shown: Math.min(CFG.sampleSize, order.length), pool: order.length, at: Date.now() };
+      sessionStorage.setItem(SS_USERS(cid, aud), JSON.stringify(st));
+      return storedView(st);
+    }
     const ck = `${aud.type}_${aud.id}`;
     const hit = contactsCache.get(ck);
     const contacts = hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit.contacts : await fetchSegmentContacts(aud);
@@ -330,7 +363,6 @@
   // Renders are cached for the page's lifetime: reopening ProofSet with the same customers and an
   // unchanged design shows the cached proofs and makes no new calls to IO.
   const renderCache = new Map();
-  const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
   async function renderForUser(tpl, user) {
     const key = `${userKey(user)}|${fnv(`${tpl.isLiquid}|${tpl.subject}|${tpl.preHeader}|${JSON.stringify(tpl.recUrls)}|${tpl.html}`)}`;
     if (renderCache.has(key)) return { ...renderCache.get(key), user };
@@ -346,7 +378,7 @@
       couponListId: 0,
       isLiquidSyntax: tpl.isLiquid,
       // The test profile has no Profile ID, so it is previewed by email address, like IO's own picker.
-      user: user.dummy ? { identifierType: 'em', identifierValue: user.email } : { identifierType: 'insider_id', identifierValue: user.insiderId },
+      user: user.dummy || user.byEmail ? { identifierType: 'em', identifierValue: user.email } : { identifierType: 'insider_id', identifierValue: user.insiderId },
       subject: b64enc(tpl.subject),
       preHeader: b64enc(tpl.preHeader),
       html: b64enc(tpl.html),
@@ -368,6 +400,7 @@
         subject: b64dec(json.subject),
         preHeader: b64dec(json.preHeader),
         thumbnail: b64dec(json.thumbnail),
+        profileId: typeof json.insiderId === 'string' ? json.insiderId : '', // IO's Profile ID for the previewed person
         bytes: new Blob([html]).size,
       };
     } catch (e) {
@@ -899,13 +932,27 @@
     btn.id = `ps-btn-${CHANNEL}`;
     btn.className = IS_PROD ? 'ps-btn' : 'ps-btn is-pre';
     btn.type = 'button';
-    btn.title = `Preview this email for ${CFG.sampleSize} customers in this campaign's audience` + (IS_PROD ? '' : ' (pre-prod build)');
+    btn.title = "Preview this email for customers in this campaign's audience" + (IS_PROD ? '' : ' (pre-prod build)');
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg><span>ProofSet</span>' + (IS_PROD ? '' : '<span class="ps-pre">PRE</span>');
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openDrawer(); });
     wrap.appendChild(btn);
     slot.parentElement.insertBefore(wrap, slot);
     initUpdateNotice(wrap);
   }
+
+  // While ProofSet is open the page behind it does not scroll; the original overflow is put back on close.
+  function lockScroll(el) {
+    if (!el || el.dataset.psLock) return;
+    el.dataset.psLock = el.style.overflow || ' ';
+    el.style.overflow = 'hidden';
+  }
+  function unlockScroll(el) {
+    if (!el || !el.dataset.psLock) return;
+    el.style.overflow = el.dataset.psLock.trim();
+    delete el.dataset.psLock;
+  }
+  const lockPage = () => { lockScroll(document.documentElement); lockScroll(document.body); };
+  const unlockPage = () => { unlockScroll(document.documentElement); unlockScroll(document.body); };
 
   function openDrawer() {
     const ci = campaignInfo();
@@ -951,6 +998,7 @@
         <div id="ps-body"></div>
       </div>`;
     document.body.appendChild(ov);
+    lockPage();
 
     const $ = (id) => ov.querySelector('#' + id);
 
@@ -966,7 +1014,7 @@
       if (newer && cta) showUpdateBadge(cta, latest);
       setTimeout(() => { vtag.textContent = vtagText; }, 4000);
     };
-    const close = () => { ov.remove(); revokeProofUrls(); };
+    const close = () => { ov.remove(); unlockPage(); revokeProofUrls(); };
     $('ps-close').onclick = close;
     ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
 
@@ -990,15 +1038,15 @@
       const t = $('ps-aud-toggle');
       t.querySelector('.lbl').textContent = manual ? trunc(state.aud.name, AUD_LABEL_MAX) : state.aud ? 'Change audience' : 'Select audience';
       t.title = manual
-        ? `Audience: ${state.aud.name} (${state.aud.type} segment #${state.aud.id}). Click to change.`
+        ? `Audience: ${audDesc(state.aud)}. Click to change.`
         : state.aud
-          ? `Campaign audience: ${state.aud.name} (${state.aud.type} segment #${state.aud.id}). Click to pick a different segment.`
+          ? `Campaign audience: ${audDesc(state.aud)}. Click to pick a different segment.`
           : 'Pick a segment to preview this email for its customers.';
       const r = $('ps-aud-reset');
       r.hidden = !manual;
       if (!r.hidden) {
         r.title = camp
-          ? `Back to the campaign's audience: ${camp.name} (${camp.type} segment #${camp.id})`
+          ? `Back to the campaign's audience: ${audDesc(camp)}`
           : "Remove the chosen segment. This campaign has no segment ProofSet can use, so a test proof is shown.";
       }
     };
@@ -1017,7 +1065,7 @@
 
     /* Loading state with rotating messages, so the user always knows work is happening. */
     const FUN = [
-      `Rounding up ${CFG.sampleSize} lucky subscribers…`,
+      'Rounding up some lucky subscribers…',
       'Asking IO very politely to render each proof…',
       'Resolving Liquid, one drop at a time…',
       'Checking which bouquet each person gets…',
@@ -1047,11 +1095,11 @@
 
     /* One flow for both "Use segment" and "Refresh Proofs": pick users, then render. */
     async function pickAndRender() {
-      showLoading(`Gathering ${CFG.sampleSize} customers from "${state.aud.name}"…`);
+      showLoading(state.aud.type === 'emails' ? 'Reading the email addresses from the Recipients rule…' : `Gathering customers from "${state.aud.name}"…`);
       let picked;
       try { picked = await pickRandomUsers(ci.id, state.aud); } catch (e) {
         if (!e.code) throw e;
-        return renderTestProof(`${esc(e.message)} Please choose a valid segment with <b>Change audience</b> above.`);
+        return renderTestProof(esc(e.message) + (e.code === 'stale' ? '' : ' Please choose a valid segment with <b>Change audience</b> above.'));
       }
       await renderProofs(picked);
     }
@@ -1217,7 +1265,9 @@
         c._psUser = u;
         const who = u.dummy
           ? `<span class="em dummy ps-tip" data-tip="Test InsiderOne Profile" aria-label="${esc(u.label)}, Test InsiderOne Profile">${esc(u.label)}</span>`
-          : `<a class="em" href="${profileUrl(u.insiderId)}" target="_blank" rel="noopener" title="Open customer profile in IO">${esc(u.label)}</a>`;
+          : u.byEmail
+            ? `<a class="em" target="_blank" rel="noopener">${esc(u.label)}</a>` // linked once IO returns the Profile ID
+            : `<a class="em" href="${profileUrl(u.insiderId)}" target="_blank" rel="noopener" title="Open customer profile in IO">${esc(u.label)}</a>`;
         c.innerHTML = `<div class="ps-ch">${who}<span class="sz">…</span></div><span class="ps-ver"></span>
           <div class="ps-flags"></div>
           <div class="ps-sub"><b>Subject:</b> <span class="sj">…</span></div>
@@ -1312,7 +1362,9 @@
       else if (ok.length > 1) versionNote = ` · ${next} distinct design(s) across ${ok.length} customers.`;
       $('ps-meta').innerHTML = (view.test
         ? `<div class="l1">Showing a test proof for <b>${TEST_EMAIL}</b> (Test InsiderOne Profile), not a real customer.</div>`
-        : `<div class="l1">Here's a sample of what your customers in <span class="aud">${esc(state.aud.name)}</span> will receive.</div>`)
+        : state.aud.type === 'emails'
+          ? `<div class="l1">Here's what the email addresses in the campaign's <span class="aud">Email Address</span> rule will receive.</div>`
+          : `<div class="l1">Here's a sample of what your customers in <span class="aud">${esc(state.aud.name)}</span> will receive.</div>`)
         + `<div class="l2">Estimated Template Size: <b>${kb(avg)} KB</b>${esc(versionNote)}`
         + (failed ? ` · ${failed} proof(s) failed.` : '') + '</div>';
 
@@ -1333,6 +1385,10 @@
     }
 
     function fillCard(card, r) {
+      const link = card.querySelector('a.em');
+      if (link && r.user && r.user.byEmail && !link.getAttribute('href')) {
+        if (r.profileId) { link.href = profileUrl(r.profileId); link.title = 'Open customer profile in IO'; } else link.title = 'No IO profile found for this address';
+      }
       card.querySelector('.sz').textContent = r.error ? 'error' : `${kb(r.bytes || 0)} KB`;
       card.querySelector('.sj').textContent = r.error ? '-' : (r.subject || '(empty)');
       const frame = card.querySelector('.ps-frame');
@@ -1436,7 +1492,8 @@
           who.dataset.tip = 'Test InsiderOne Profile';
           who.removeAttribute('title');
         } else {
-          who.href = profileUrl(r.user.insiderId);
+          const pid = r.user.insiderId || r.profileId;
+          if (pid) who.href = profileUrl(pid); else who.removeAttribute('href');
           who.classList.remove('dummy', 'ps-tip');
           who.title = 'Open customer profile in IO';
         }
@@ -1479,7 +1536,8 @@
         busy = false;
       };
 
-      const close = () => { z.remove(); document.removeEventListener('keydown', onKey); };
+      const drawerEl = document.getElementById('ps-drawer');
+      const close = () => { z.remove(); unlockScroll(drawerEl); document.removeEventListener('keydown', onKey); };
       const onKey = (e) => {
         if (e.key === 'Escape') close();
         else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
@@ -1500,6 +1558,7 @@
       });
 
       document.body.appendChild(z);
+      lockScroll(drawerEl); // the proof grid behind the popup stays put
       fill();
       q('.ps-mclose').focus();
     }
@@ -1527,6 +1586,7 @@
   const tick = () => {
     pending = null;
     lastTick = Date.now();
+    if (document.body.dataset.psLock && !document.getElementById('ps-overlay')) unlockPage(); // drawer removed by the page
     const ci = campaignInfo();
     if (!ci || ci.step === 'launch') { document.getElementById(`ps-cta-${CHANNEL}`)?.remove(); return; }
     try { injectButton(); } catch (e) { /* ignore */ }
