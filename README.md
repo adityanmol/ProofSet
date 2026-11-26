@@ -34,6 +34,19 @@ Install link: <https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/Pr
 
 `staging` (development) -> `pre-prod` (validation, pre-prod install link) -> `main` (production install link).
 
+### Versions
+
+Production and pre-prod are numbered separately, in `versions.json`:
+
+- `prod` is the version in `ProofSet.user.js`, served from `main` (e.g. 1.0.0, 1.0.1, ...).
+- `preprod` is written into `ProofSet.preprod.user.js` by `build.js`, served from `pre-prod` (e.g. 1.2.6, 1.2.7, ...).
+
+Each line only goes up, so Tampermonkey auto-updates both installs.
+
+- Every change for validation: `node build.js --bump-preprod`, commit on `staging`, merge to `pre-prod`.
+- Releasing to everyone: `node build.js --bump-prod` (on the commit you release), commit, merge to `pre-prod` and `main`. Note in CHANGELOG which pre-prod build it equals.
+- `node build.js --check` fails if the pre-prod file is out of date or the two version sources disagree.
+
 `ProofSet.user.js` is the only file to edit. `ProofSet.preprod.user.js` is generated from it:
 
 ```

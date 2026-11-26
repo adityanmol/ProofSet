@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (first public release)
+## Production 1.0.0 (first public release, = pre-prod 1.2.6)
 
 First release for everyone. It contains everything validated in pre-prod up to build 1.2.6 (listed below under "Pre-release history"):
 
@@ -13,7 +13,7 @@ First release for everyone. It contains everything validated in pre-prod up to b
 - Tracking pixels neutralised in previews, "View in browser" fixed, page scroll locked while open.
 - Update badge with "Refresh to finish".
 
-The version numbers were reset to 1.0.0 for the public release. Pre-release builds used 0.x and 1.0.0 to 1.2.6; their notes are kept below for reference.
+Production (main) starts its own numbering at 1.0.0 with this release; pre-prod keeps its own numbering (currently 1.2.6) and goes on from there. Production 1.0.0 = pre-prod 1.2.6. The pre-release notes are kept below for reference.
 
 # Pre-release history
 

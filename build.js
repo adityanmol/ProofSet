@@ -2,8 +2,16 @@
 /*
  * Generates ProofSet.preprod.user.js from ProofSet.user.js (the single source of truth).
  *
- *   node build.js          write ProofSet.preprod.user.js
- *   node build.js --check  exit 1 if ProofSet.preprod.user.js is out of date
+ *   node build.js                 write ProofSet.preprod.user.js
+ *   node build.js --check         exit 1 if ProofSet.preprod.user.js is out of date
+ *   node build.js --bump-preprod  next pre-prod version (1.2.6 -> 1.2.7), then build
+ *   node build.js --bump-prod     next production version (1.0.0 -> 1.0.1), written into
+ *                                 ProofSet.user.js, then build. Use when releasing to main.
+ *
+ * Versions: production and pre-prod are numbered separately, in versions.json.
+ *   prod    = @version / const VERSION in ProofSet.user.js (what main serves)
+ *   preprod = written into ProofSet.preprod.user.js by this script (what pre-prod serves)
+ * Each line only ever goes up, so Tampermonkey auto-updates both.
  *
  * The pre-prod build installs side by side with production in Tampermonkey:
  * its own name and namespace, its own update URL (the pre-prod branch), a "PRE"
@@ -17,6 +25,24 @@ const REPO_RAW = 'https://raw.githubusercontent.com/adityanmol/ProofSet';
 const SRC = path.join(__dirname, 'ProofSet.user.js');
 const OUT = path.join(__dirname, 'ProofSet.preprod.user.js');
 const PRE_URL = `${REPO_RAW}/pre-prod/ProofSet.preprod.user.js`;
+const VERSIONS = path.join(__dirname, 'versions.json');
+
+const SEMVER = /^\d+\.\d+\.\d+$/;
+const nextPatch = (v) => { const p = v.split('.').map(Number); p[2] += 1; return p.join('.'); };
+const readVersions = () => {
+  const v = JSON.parse(fs.readFileSync(VERSIONS, 'utf8'));
+  if (!SEMVER.test(v.prod || '') || !SEMVER.test(v.preprod || '')) throw new Error('build.js: versions.json needs "prod" and "preprod" as x.y.z');
+  return v;
+};
+const writeVersions = (v) => fs.writeFileSync(VERSIONS, JSON.stringify(v, null, 2) + '\n');
+
+// Writes a production version into ProofSet.user.js (header and const together).
+function setProdVersion(ver) {
+  let s = fs.readFileSync(SRC, 'utf8');
+  s = replaceOnce(s, /^\/\/ @version\s+.*$/m, `// @version      ${ver}`, '@version');
+  s = replaceOnce(s, /^(\s*)const VERSION = '[^']+';$/m, `$1const VERSION = '${ver}';`, 'const VERSION');
+  fs.writeFileSync(SRC, s);
+}
 
 function replaceOnce(text, pattern, replacement, label) {
   const matches = text.match(new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g'));
@@ -26,13 +52,18 @@ function replaceOnce(text, pattern, replacement, label) {
   return text.replace(pattern, replacement);
 }
 
-function build() {
+function build(versions) {
   let s = fs.readFileSync(SRC, 'utf8');
   const headerVer = (s.match(/^\/\/ @version\s+(\S+)$/m) || [])[1];
   const codeVer = (s.match(/^\s*const VERSION = '([^']+)';$/m) || [])[1];
   if (!headerVer || headerVer !== codeVer) {
     throw new Error(`build.js: @version (${headerVer}) and const VERSION (${codeVer}) must match`);
   }
+  if (headerVer !== versions.prod) {
+    throw new Error(`build.js: ProofSet.user.js is ${headerVer} but versions.json says prod ${versions.prod}`);
+  }
+  s = replaceOnce(s, /^\/\/ @version\s+.*$/m, `// @version      ${versions.preprod}`, '@version');
+  s = replaceOnce(s, /^(\s*)const VERSION = '[^']+';$/m, `$1const VERSION = '${versions.preprod}';`, 'const VERSION');
   s = replaceOnce(s, /^\/\/ @name\s+.*$/m, '// @name         ProofSet (pre-prod)', '@name');
   s = replaceOnce(s, /^\/\/ @namespace\s+.*$/m, '// @namespace    bluecore.cam.proofset.preprod', '@namespace');
   s = replaceOnce(s, /^\/\/ @description\s+(.*)$/m, '// @description  [pre-prod] $1', '@description');
@@ -44,7 +75,19 @@ function build() {
   return s;
 }
 
-const out = build();
+const versions = readVersions();
+if (process.argv.includes('--bump-preprod')) {
+  versions.preprod = nextPatch(versions.preprod);
+  writeVersions(versions);
+  console.log(`pre-prod version is now ${versions.preprod}`);
+}
+if (process.argv.includes('--bump-prod')) {
+  versions.prod = nextPatch(versions.prod);
+  setProdVersion(versions.prod);
+  writeVersions(versions);
+  console.log(`production version is now ${versions.prod}`);
+}
+const out = build(versions);
 if (process.argv.includes('--check')) {
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
   if (current !== out) {
@@ -54,5 +97,5 @@ if (process.argv.includes('--check')) {
   console.log('ProofSet.preprod.user.js is up to date.');
 } else {
   fs.writeFileSync(OUT, out);
-  console.log(`Wrote ${path.basename(OUT)} (update URL: ${PRE_URL})`);
+  console.log(`Wrote ${path.basename(OUT)} as pre-prod ${versions.preprod}, production is ${versions.prod} (update URL: ${PRE_URL})`);
 }

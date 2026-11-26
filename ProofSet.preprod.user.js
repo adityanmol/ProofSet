@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (pre-prod)
 // @namespace    bluecore.cam.proofset.preprod
-// @version      1.0.0
+// @version      1.2.6
 // @description  [pre-prod] Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -50,7 +50,7 @@
   const CHANNEL = 'pre-prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.0.0';
+  const VERSION = '1.2.6';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
