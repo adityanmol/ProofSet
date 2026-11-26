@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ProofSet (IO multi-user proofs)
 // @namespace    bluecore.cam.proofset
-// @version      1.2.6
+// @version      1.0.0
 // @description  Bluecore-style proof set inside the InsiderOne email editor: previews the email for a sample of customers in the campaign audience, 8 at a time.
 // @author       Aditya Anmol
 // @match        https://*.inone.useinsider.com/*
@@ -48,7 +48,7 @@
   const CHANNEL = 'prod';
   const IS_PROD = CHANNEL === 'prod';
   // Must match @version in the header (build.js checks this).
-  const VERSION = '1.2.6';
+  const VERSION = '1.0.0';
   const UPDATE_URL = IS_PROD
     ? 'https://raw.githubusercontent.com/adityanmol/ProofSet/main/ProofSet.user.js'
     : 'https://raw.githubusercontent.com/adityanmol/ProofSet/pre-prod/ProofSet.preprod.user.js';
@@ -793,8 +793,8 @@
   // Checks this build's own install URL on GitHub (never IO) at most once every 6 hours, and only
   // when the ProofSet button is added on a Design page. If a newer version exists, a badge on the
   // button offers the update; after installing it in Tampermonkey, the badge asks to refresh.
-  const UPD_CHECK_KEY = `proofset:update-check:${CHANNEL}`;
-  const UPD_PENDING_KEY = `proofset:update-pending:${CHANNEL}`;
+  const UPD_CHECK_KEY = `proofset:update-check:v1:${CHANNEL}`; // v1: fresh keys for the public 1.0.0 numbering
+  const UPD_PENDING_KEY = `proofset:update-pending:v1:${CHANNEL}`;
   const UPD_EVERY_MS = 30 * 60 * 1000; // GitHub only, 1 KB per check
   const cmpVer = (a, b) => {
     const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
